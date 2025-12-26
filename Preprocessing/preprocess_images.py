@@ -1,3 +1,13 @@
+import os
+import time
+from PIL import Image
+
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except ImportError:
+    pass
+
 def preprocess_images(source_folder, dest_folder, target_size=(256, 256)):
     if not os.path.exists(dest_folder):
         os.makedirs(dest_folder)
