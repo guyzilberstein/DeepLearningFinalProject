@@ -33,7 +33,7 @@ class WeightedMSELoss(nn.Module):
         # Mean over the batch
         return weighted_errors.mean()
 
-def train_model(num_epochs=20, batch_size=16, learning_rate=0.001):
+def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
     # 1. Setup Paths
     csv_file = os.path.join(project_root, 'data', 'dataset.csv')
     img_dir = os.path.join(project_root, 'data', 'processed_images')
