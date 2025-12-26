@@ -22,12 +22,3 @@ class CampusLocator(nn.Module):
         # This function defines the flow of data
         # Image Tensor -> Backbone -> 2 Coordinates
         return self.backbone(x)
-
-# Quick test to ensure it works
-if __name__ == "__main__":
-    model = CampusLocator()
-    # Create a fake image tensor (Batch Size 1, 3 Channels, 224x224)
-    dummy_input = torch.rand(1, 3, 224, 224)
-    output = model(dummy_input)
-    print(f"Model Output: {output}") 
-    # Result should look like: tensor([[0.123, -0.456]]) - random initial guesses
