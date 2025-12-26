@@ -1,0 +1,58 @@
+import torch
+from torch.utils.data import Dataset
+from PIL import Image
+import pandas as pd
+import torchvision.transforms as transforms
+import os
+
+class CampusDataset(Dataset):
+    def __init__(self, csv_file, root_dir):
+        """
+        Args:
+            csv_file (string): Path to the csv file (e.g., 'training_data_meters.csv')
+            root_dir (string): Directory with all the actual images.
+        """
+        self.data_frame = pd.read_csv(csv_file)
+        self.root_dir = root_dir
+        
+        # This pipeline prepares the image for the model
+        self.transform = transforms.Compose([
+            # 1. Resize every image to 224x224 (Standard for ResNet)
+            transforms.Resize((224, 224)),
+            
+            # 2. Convert from [0, 255] pixels to [0.0, 1.0] Tensor
+            transforms.ToTensor(),
+            
+            # 3. Normalize color channels (Standard math for pre-trained models)
+            # These specific numbers are the Mean and Std of the ImageNet dataset
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
+        ])
+
+    def __len__(self):
+        # The model asks: "How many items do I have to learn?"
+        return len(self.data_frame)
+
+    def __getitem__(self, idx):
+        # The model asks: "Give me item #42"
+        
+        # A. Find the filename in the CSV at row 'idx'
+        img_name = self.data_frame.iloc[idx]['filename']
+        img_path = os.path.join(self.root_dir, img_name)
+        
+        # B. Open the image file
+        # .convert('RGB') ensures it has 3 channels (Red, Green, Blue)
+        image = Image.open(img_path).convert('RGB')
+        
+        # C. Apply the transforms (Resize -> Tensor -> Normalize)
+        image_tensor = self.transform(image)
+        
+        # D. Get the labels (The "Right Answer")
+        # We grab the meters_x and meters_y we calculated in Step 2
+        label_x = self.data_frame.iloc[idx]['x_meters']
+        label_y = self.data_frame.iloc[idx]['y_meters']
+        
+        # Convert labels to a Tensor (float32 is standard for regression)
+        labels = torch.tensor([label_x, label_y], dtype=torch.float32)
+        
+        return image_tensor, labels
