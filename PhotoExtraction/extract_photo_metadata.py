@@ -7,8 +7,6 @@ import pandas as pd
 from PIL import Image, ExifTags
 from pillow_heif import register_heif_opener
 
-# dummy comment
-
 # Register HEIC opener with Pillow
 register_heif_opener()
 
