@@ -10,7 +10,7 @@ class CampusDataset(Dataset):
     def __init__(self, csv_file, root_dir):
         """
         Args:
-            csv_file (string): Path to the csv file (e.g., 'training_data_meters.csv')
+            csv_file (string): Path to the csv file (e.g., 'dataset.csv')
             root_dir (string): Directory with all the actual images.
         """
         self.data_frame = pd.read_csv(csv_file)
@@ -43,6 +43,8 @@ class CampusDataset(Dataset):
         
         # B. Open the image file
         # .convert('RGB') ensures it has 3 channels (Red, Green, Blue)
+        # Handle FileNotFoundError gracefully? Or let it crash so we know something is wrong?
+        # Better to let it crash or filter dataset beforehand.
         image = Image.open(img_path).convert('RGB')
         
         # C. Apply the transforms (Resize -> Tensor -> Normalize)

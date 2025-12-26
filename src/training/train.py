@@ -5,8 +5,17 @@ from torch.utils.data import DataLoader, random_split, Subset
 import os
 import copy
 import numpy as np
-from Preprocessing.img_to_tensor import CampusDataset
-from model import CampusLocator
+import sys
+
+# Ensure we can import from src
+# Add the project root to sys.path
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(script_dir))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+from src.model.dataset import CampusDataset
+from src.model.network import CampusLocator
 
 # Custom Weighted MSE Loss
 class WeightedMSELoss(nn.Module):
@@ -26,14 +35,20 @@ class WeightedMSELoss(nn.Module):
 
 def train_model(num_epochs=20, batch_size=16, learning_rate=0.001):
     # 1. Setup Paths
-    # Current directory is project root
-    csv_file = 'Preprocessing/processed_data.csv'
-    img_dir = 'ProcessedImages'
+    csv_file = os.path.join(project_root, 'data', 'dataset.csv')
+    img_dir = os.path.join(project_root, 'data', 'processed_images')
+    checkpoint_dir = os.path.join(project_root, 'checkpoints')
+    output_dir = os.path.join(project_root, 'outputs')
+    
+    if not os.path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
     
     if not os.path.exists(csv_file):
-        raise FileNotFoundError(f"Processed data not found at {csv_file}. Run coordinates_normalizer.py first.")
+        raise FileNotFoundError(f"Processed data not found at {csv_file}. Run normalize_coords.py first.")
     if not os.path.exists(img_dir):
-        raise FileNotFoundError(f"Processed images not found at {img_dir}. Run preprocess_images.py first.")
+        raise FileNotFoundError(f"Processed images not found at {img_dir}. Run convert_images.py first.")
 
     # 2. Prepare Dataset
     full_dataset = CampusDataset(csv_file=csv_file, root_dir=img_dir)
@@ -54,10 +69,9 @@ def train_model(num_epochs=20, batch_size=16, learning_rate=0.001):
     )
     
     # Save the test indices so evaluate.py knows which images are in the test set
-    # We can save indices to a numpy file
     test_indices = test_dataset.indices
-    np.save('test_indices.npy', test_indices)
-    print(f"Saved {len(test_indices)} test indices to test_indices.npy")
+    np.save(os.path.join(output_dir, 'test_indices.npy'), test_indices)
+    print(f"Saved {len(test_indices)} test indices to outputs/test_indices.npy")
     
     print(f"Dataset Split: {train_size} Train, {val_size} Val, {test_size} Test")
     
@@ -125,8 +139,9 @@ def train_model(num_epochs=20, batch_size=16, learning_rate=0.001):
             if phase == 'val' and epoch_loss < best_loss:
                 best_loss = epoch_loss
                 best_model_wts = copy.deepcopy(model.state_dict())
-                torch.save(model.state_dict(), 'best_campus_locator.pth')
-                print("New best model saved!")
+                save_path = os.path.join(checkpoint_dir, 'best_campus_locator.pth')
+                torch.save(model.state_dict(), save_path)
+                print(f"New best model saved to {save_path}")
 
     print(f'Best val loss: {best_loss:.4f}')
     

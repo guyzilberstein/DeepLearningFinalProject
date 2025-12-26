@@ -18,7 +18,7 @@ def preprocess_images(source_folder, dest_folder, target_size=(256, 256)):
     # Get list of all source files recursively
     files = []
     for ext in ['*.HEIC', '*.heic', '*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']:
-        files.extend(list[Path](source_path.rglob(ext)))
+        files.extend(list(source_path.rglob(ext)))
         
     print(f"Scanning {len(files)} files in source (recursively)...")
     
@@ -59,12 +59,12 @@ def preprocess_images(source_folder, dest_folder, target_size=(256, 256)):
     print(f"Time taken: {end_time - start_time:.2f} seconds.")
 
 if __name__ == "__main__":
-    # Default paths assuming script is run from project root or Preprocessing/ folder
+    # Default paths assuming script is run from src/data_prep/
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
+    project_root = os.path.dirname(os.path.dirname(script_dir))
     
-    source_dir = os.path.join(project_root, "Photos")
-    dest_dir = os.path.join(project_root, "ProcessedImages")
+    source_dir = os.path.join(project_root, "data", "raw_photos")
+    dest_dir = os.path.join(project_root, "data", "processed_images")
     
     print(f"Source: {source_dir}")
     print(f"Destination: {dest_dir}")

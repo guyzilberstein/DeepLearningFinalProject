@@ -2,22 +2,18 @@ import pandas as pd
 import numpy as np
 import os
 import glob
+import json
 
 # 1. Load your data
 # Define the path to your CSV files
-# Since this script is in Preprocessing/, we look in ../PhotoExtraction/
-csv_folder = '../PhotoExtraction'  
-csv_path = os.path.join(os.path.dirname(__file__), csv_folder) # robust path handling
+# Since this script is in src/data_prep/, we look in ../../data/metadata_raw/
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(script_dir))
+csv_path = os.path.join(project_root, 'data', 'metadata_raw')
 csv_files = glob.glob(os.path.join(csv_path, '*.csv'))
 
 if not csv_files:
-    # Fallback to current directory or manual check if running from different root
-    print(f"No CSVs found in {csv_path}, trying absolute search or checking paths...")
-    # Just in case the script is run from project root, try direct path
-    csv_files = glob.glob('DeepLearningFinalProject/PhotoExtraction/*.csv')
-
-if not csv_files:
-    raise FileNotFoundError(f"No CSV files found. Checked {csv_path} and fallback paths.")
+    raise FileNotFoundError(f"No CSV files found in {csv_path}. Run extract_metadata.py first.")
 
 print(f"Found {len(csv_files)} CSV files: {[os.path.basename(f) for f in csv_files]}")
 
@@ -35,6 +31,10 @@ for file in csv_files:
     df_list.append(temp_df)
 
 df = pd.concat(df_list, ignore_index=True)
+
+# SHUFFLE DATA (Reproducible)
+df = df.sample(frac=1, random_state=42).reset_index(drop=True)
+
 print(f"Total samples loaded: {len(df)}")
 
 # 2. Define the "Center" of your campus area (The Reference Point)
@@ -43,6 +43,13 @@ ref_lat = df['lat'].mean()
 ref_lon = df['lon'].mean()
 
 print(f"Reference Point (Mean): Lat={ref_lat:.6f}, Lon={ref_lon:.6f}")
+
+# SAVE REFERENCE POINT for later inference
+ref_data = {'ref_lat': ref_lat, 'ref_lon': ref_lon}
+ref_file = os.path.join(project_root, 'data', 'reference_coords.json')
+with open(ref_file, 'w') as f:
+    json.dump(ref_data, f)
+print(f"Saved reference coordinates to {ref_file}")
 
 # 3. Conversion Constants (Approximate for small areas)
 # 1 degree of latitude is ~111,132 meters
@@ -55,8 +62,14 @@ df['x_meters'] = (df['lon'] - ref_lon) * METERS_PER_LON
 df['y_meters'] = (df['lat'] - ref_lat) * METERS_PER_LAT
 
 # 5. Save the prepared data
-# Save in the same folder as the script or a specific output folder
-output_file = os.path.join(os.path.dirname(__file__), 'processed_data.csv')
-df.to_csv(output_file, index=False)
+# Save in data/ folder
+output_file = os.path.join(project_root, 'data', 'dataset.csv')
+
+# Ensure we keep 'gps_accuracy_m'
+cols_to_keep = ['filename', 'path', 'lat', 'lon', 'x_meters', 'y_meters', 'gps_accuracy_m', 'source_file']
+# Filter columns that actually exist
+cols_to_keep = [c for c in cols_to_keep if c in df.columns]
+
+df[cols_to_keep].to_csv(output_file, index=False)
 print(f"Preprocessing complete. Data saved to {output_file}")
 print(df[['filename', 'lat', 'lon', 'x_meters', 'y_meters']].head())

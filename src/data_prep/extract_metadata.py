@@ -106,12 +106,17 @@ def extract_lat_lon(img_path: Path) -> Tuple[Optional[float], Optional[float], O
 def main():
     # Robustly find paths relative to this script
     script_dir = Path(__file__).resolve().parent
-    project_root = script_dir.parent
-    photos_root = project_root / "Photos"
+    # Go up two levels: src/data_prep -> src -> ProjectRoot
+    project_root = script_dir.parent.parent
+    photos_root = project_root / "data" / "raw_photos"
+    output_dir = project_root / "data" / "metadata_raw"
 
     if not photos_root.exists():
         print(f"Error: Photos folder not found at {photos_root}")
         return
+        
+    if not output_dir.exists():
+        os.makedirs(output_dir)
 
     print(f"Scanning all folders in {photos_root}...")
     
@@ -121,7 +126,7 @@ def main():
             continue
 
         print(f"\nProcessing: {folder_path.name}")
-        out_csv = script_dir / f"{folder_path.name}.csv"
+        out_csv = output_dir / f"{folder_path.name}.csv"
         
         rows = []
         exts = {".jpg", ".jpeg", ".png", ".heic", ".JPG", ".JPEG", ".HEIC"}

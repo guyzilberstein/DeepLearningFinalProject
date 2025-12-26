@@ -4,15 +4,23 @@ from torch.utils.data import DataLoader
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-from Preprocessing.img_to_tensor import CampusDataset
-from model import CampusLocator
+import sys
+
+# Ensure we can import from src
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(script_dir))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+from src.model.dataset import CampusDataset
+from src.model.network import CampusLocator
 
 def visualize_results():
     # 1. Setup
-    csv_file = 'Preprocessing/processed_data.csv'
-    img_dir = 'ProcessedImages'
-    model_path = 'best_campus_locator.pth'
-    output_plot = 'results_visualization.png'
+    csv_file = os.path.join(project_root, 'data', 'dataset.csv')
+    img_dir = os.path.join(project_root, 'data', 'processed_images')
+    model_path = os.path.join(project_root, 'checkpoints', 'best_campus_locator.pth')
+    output_plot = os.path.join(project_root, 'outputs', 'results_visualization.png')
     
     if not os.path.exists(model_path):
         print(f"Model file {model_path} not found. Run train.py first.")
@@ -81,4 +89,3 @@ def visualize_results():
 
 if __name__ == "__main__":
     visualize_results()
-

@@ -5,8 +5,16 @@ import numpy as np
 import os
 import folium
 import pandas as pd
-from Preprocessing.img_to_tensor import CampusDataset
-from model import CampusLocator
+import sys
+
+# Ensure we can import from src
+script_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(os.path.dirname(script_dir))
+if project_root not in sys.path:
+    sys.path.append(project_root)
+
+from src.model.dataset import CampusDataset
+from src.model.network import CampusLocator
 
 def denormalize_coordinates(x_meters, y_meters, ref_lat, ref_lon):
     """
@@ -22,10 +30,10 @@ def denormalize_coordinates(x_meters, y_meters, ref_lat, ref_lon):
 
 def visualize_on_map():
     # 1. Setup
-    csv_file = 'Preprocessing/processed_data.csv'
-    img_dir = 'ProcessedImages'
-    model_path = 'best_campus_locator.pth'
-    output_map = 'campus_map_visualization.html'
+    csv_file = os.path.join(project_root, 'data', 'dataset.csv')
+    img_dir = os.path.join(project_root, 'data', 'processed_images')
+    model_path = os.path.join(project_root, 'checkpoints', 'best_campus_locator.pth')
+    output_map = os.path.join(project_root, 'outputs', 'campus_map_visualization.html')
     
     if not os.path.exists(model_path):
         print(f"Model file {model_path} not found. Run train.py first.")
@@ -50,7 +58,6 @@ def visualize_on_map():
     model.eval()
     
     # 5. Initialize Map with Satellite Imagery
-    # Esri WorldImagery allows for much higher zoom levels than standard OSM
     m = folium.Map(
         location=[ref_lat, ref_lon],
         zoom_start=19,
@@ -108,8 +115,7 @@ def visualize_on_map():
             popup=f"<b>Actual</b><br>File: {full_dataset.data_frame.iloc[idx]['filename']}"
         ).add_to(fg)
         
-        # Predicted Location (X Marker via HTML div icon or just a different color Circle)
-        # We'll use a Red Circle with a dot
+        # Predicted Location
         folium.CircleMarker(
             location=[pred_lat, pred_lon],
             radius=6,
