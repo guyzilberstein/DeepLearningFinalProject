@@ -4,6 +4,7 @@ from PIL import Image
 import pandas as pd
 import torchvision.transforms as transforms
 import os
+import math
 
 class CampusDataset(Dataset):
     def __init__(self, csv_file, root_dir):
@@ -52,7 +53,18 @@ class CampusDataset(Dataset):
         label_x = self.data_frame.iloc[idx]['x_meters']
         label_y = self.data_frame.iloc[idx]['y_meters']
         
+        # Get GPS accuracy for weighting
+        # Default to a moderate value if missing (e.g. 10m)
+        gps_accuracy = self.data_frame.iloc[idx].get('gps_accuracy_m', 10.0)
+        if pd.isna(gps_accuracy):
+            gps_accuracy = 10.0
+            
         # Convert labels to a Tensor (float32 is standard for regression)
         labels = torch.tensor([label_x, label_y], dtype=torch.float32)
         
-        return image_tensor, labels
+        # Inverse variance weighting is common: weight = 1 / (sigma^2)
+        # Avoid division by zero by clamping min accuracy
+        sigma = max(float(gps_accuracy), 1.0)
+        weight = torch.tensor([1.0 / (sigma**2)], dtype=torch.float32)
+        
+        return image_tensor, labels, weight

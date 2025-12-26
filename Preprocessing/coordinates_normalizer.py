@@ -27,6 +27,11 @@ for file in csv_files:
     temp_df = pd.read_csv(file)
     # Add a column for the source file if needed
     temp_df['source_file'] = os.path.basename(file)
+    
+    # Fix Filename Mismatch: Ensure extension is .jpg to match preprocess_images.py output
+    if 'filename' in temp_df.columns:
+        temp_df['filename'] = temp_df['filename'].apply(lambda x: os.path.splitext(x)[0] + ".jpg")
+        
     df_list.append(temp_df)
 
 df = pd.concat(df_list, ignore_index=True)
