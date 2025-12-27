@@ -52,7 +52,9 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
         raise FileNotFoundError(f"Processed images not found at {img_dir}. Run convert_images.py first.")
 
     # 2. Prepare Dataset
-    full_dataset = CampusDataset(csv_file=csv_file, root_dir=img_dir)
+    # We need two instances: one with augmentation (Train) and one without (Val/Test)
+    full_dataset_train = CampusDataset(csv_file=csv_file, root_dir=img_dir, is_train=True)
+    full_dataset_val   = CampusDataset(csv_file=csv_file, root_dir=img_dir, is_train=False)
     
     # Read CSV for stratification
     df = pd.read_csv(csv_file)
@@ -88,9 +90,10 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
     )
     
     # Create Subsets
-    train_dataset = Subset(full_dataset, train_idx)
-    val_dataset = Subset(full_dataset, val_idx)
-    test_dataset = Subset(full_dataset, test_idx)
+    # Use the Augmentation dataset for Train, and the Clean dataset for Val/Test
+    train_dataset = Subset(full_dataset_train, train_idx)
+    val_dataset = Subset(full_dataset_val, val_idx)
+    test_dataset = Subset(full_dataset_val, test_idx)
     
     # Verify split distribution in Test set (Optional, for logging)
     print("\nTest Set Distribution by Location:")

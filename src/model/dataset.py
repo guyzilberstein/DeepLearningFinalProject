@@ -7,28 +7,41 @@ import os
 import math
 
 class CampusDataset(Dataset):
-    def __init__(self, csv_file, root_dir):
+    def __init__(self, csv_file, root_dir, is_train=False):
         """
         Args:
             csv_file (string): Path to the csv file (e.g., 'dataset.csv')
             root_dir (string): Directory with all the actual images.
+            is_train (bool): If True, apply data augmentation.
         """
         self.data_frame = pd.read_csv(csv_file)
         self.root_dir = root_dir
         
         # This pipeline prepares the image for the model
-        self.transform = transforms.Compose([
-            # 1. Resize every image to 224x224 (Standard for ResNet)
-            transforms.Resize((224, 224)),
-            
-            # 2. Convert from [0, 255] pixels to [0.0, 1.0] Tensor
-            transforms.ToTensor(),
-            
-            # 3. Normalize color channels (Standard math for pre-trained models)
-            # These specific numbers are the Mean and Std of the ImageNet dataset
-            transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                 std=[0.229, 0.224, 0.225])
-        ])
+        if is_train:
+            # Training Pipeline with Augmentation
+            self.transform = transforms.Compose([
+                # Resize slightly larger so we can crop
+                transforms.Resize((256, 256)),
+                # Randomly crop a piece of the image (simulates being slightly closer/further)
+                transforms.RandomResizedCrop(224, scale=(0.8, 1.0), ratio=(0.9, 1.1)),
+                # Randomly change lighting (simulates time of day/weather)
+                transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
+                # Random Grayscale (10% chance) - helps rely on shape not just color
+                transforms.RandomGrayscale(p=0.1),
+                
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+            ])
+        else:
+            # Validation/Test Pipeline (Deterministic)
+            self.transform = transforms.Compose([
+                transforms.Resize((224, 224)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225])
+            ])
 
     def __len__(self):
         # The model asks: "How many items do I have to learn?"

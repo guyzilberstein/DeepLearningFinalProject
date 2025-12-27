@@ -125,3 +125,17 @@ We attempted to push the EfficientNet-B0 model further by training for 80 epochs
     *   **Validation Loss:** Spiked to **328** (Doubled from 166).
 *   **Analysis:** The model began to overfit the small training set after ~50 epochs. It memorized the training data instead of generalizing.
 *   **Conclusion:** Simply training longer is not the solution. We need to make the model smarter (better architecture) or give it better data (higher resolution).
+
+### 6. Failure of ConvNeXt-Tiny (On Mac)
+We attempted to upgrade to **ConvNeXt-Tiny** (28M params) to capture better scene features.
+*   **Outcome:** Training failed to converge. Loss exploded to ~4000+.
+*   **Reason:** The model is too complex for the small batch size and limited compute available on the Mac (MPS). It likely needs hyperparameter tuning (warmup, weight decay) and larger batches.
+
+### 7. Data Augmentation Experiment
+We reverted to **EfficientNet-B0** but added robust data augmentation to prevent the overfitting we saw at epoch 80.
+*   **Augmentations:** `RandomResizedCrop` (scale 0.8-1.0) and `ColorJitter`.
+*   **Results (25 Epochs):**
+    *   **Mean Error:** **18.48 meters**
+    *   **Median Error:** **17.56 meters**
+    *   **Analysis:** The results are currently worse than the non-augmented run (~13m), but this is expected. Harder data takes longer to learn. However, the loss curve is stable and not overfitting.
+*   **Next Steps:** Continue training for 50 more epochs (Total 75) to allow convergence on the augmented data. This should yield the most robust model yet.
