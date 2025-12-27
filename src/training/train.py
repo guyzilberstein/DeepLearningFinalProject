@@ -6,6 +6,7 @@ import os
 import copy
 import numpy as np
 import sys
+import pandas as pd
 
 # Ensure we can import from src
 # Add the project root to sys.path

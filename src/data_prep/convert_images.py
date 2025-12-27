@@ -28,9 +28,15 @@ def preprocess_images(source_folder, dest_folder, target_size=(256, 256)):
     
     for i, file_path in enumerate(files):
         # 1. Determine what the output filename WOULD be
-        # We use just the filename, flattening the directory structure
-        # BEWARE: This assumes unique filenames across subdirectories, which is true for iOS IMG_XXXX.HEIC
-        new_filename = file_path.stem + ".jpg"
+        # We flatten the directory structure by replacing separators with underscores
+        # This ensures unique filenames even if different subfolders have same-named files
+        try:
+            rel_path = file_path.relative_to(source_path)
+            new_filename = str(rel_path.with_suffix('.jpg')).replace(os.sep, '_')
+        except ValueError:
+            # Fallback if relative_to fails (unlikely given how files are found)
+            new_filename = f"{file_path.parent.name}_{file_path.stem}.jpg"
+            
         save_path = os.path.join(dest_folder, new_filename)
         
         # 2. THE CHECK: Does this file already exist?
