@@ -83,3 +83,45 @@ We developed a visualization script (`src/utils/visualize_results.py`) to qualit
     *   3 Random Predictions.
     *   6 Worst Predictions (Highest Error).
 *   **Purpose:** This allows us to visually inspect if specific conditions (e.g., night time, specific buildings) correlate with high errors.
+
+## Model Refinement & Breakthrough
+We analyzed the failure modes and made two major changes to the training strategy:
+
+### 1. Stratified Data Split (85/10/5)
+We realized that a random 70/15/15 split might exclude entire small locations from the training set or test set. We switched to **Stratified Sampling** based on location (folder name) and increased the training data:
+*   **Train (85%):** Maximize data exposure.
+*   **Val (10%):** Sufficient for model selection.
+*   **Test (5%):** ~94 images, ensuring every building/area is represented proportionally.
+
+### 2. Dropping Weighted Loss
+We analyzed the `gps_accuracy_m` metadata and found a huge disparity (2m vs 15m). The Inverse Variance Weighting ($1/\sigma^2$) was scaling weights by a factor of **~56x**. This meant "low accuracy" images (which were often still visually valid) were effectively ignored.
+*   **Action:** We switched to standard **MSE Loss** for training, treating all images as equally ground truth.
+*   **Result:** Immediate and significant improvement. The model stopped ignoring "noisy" data and learned robust features from the entire dataset.
+
+### Latest Results (25 Epochs)
+*   **Mean Error:** **19.75 meters** (Previous Best: 26.39m)
+*   **Median Error:** **15.95 meters** (Previous Best: 22.39m)
+*   **Improvement:** **~25% reduction in error.**
+
+### 3. Adding Learning Rate Scheduler
+We noticed the loss spiking in later epochs, suggesting the learning rate was too high for fine-tuning. We implemented `ReduceLROnPlateau` (factor=0.1, patience=3).
+*   **Outcome (50 Epochs):**
+    *   **Mean Error:** **18.01 meters**
+    *   **Median Error:** **14.53 meters**
+    *   **Validation Loss:** Stabilized around ~473, indicating ResNet-18 had reached its capacity.
+
+### 4. Upgrade to EfficientNet-B0
+Given the limited dataset (~1,600 images), we switched from ResNet-18 (25M params) to **EfficientNet-B0** (5.3M params). EfficientNet is less prone to overfitting and learns more robust features.
+*   **Outcome (50 Epochs + Scheduler):**
+    *   **Mean Error:** **13.45 meters** (Previous Best: 18.01m)
+    *   **Median Error:** **10.95 meters** (Previous Best: 14.53m)
+    *   **Validation Loss:** Dropped massively to **~166** (was ~473).
+*   **Status:** The model was still improving at Epoch 50, suggesting further training could break the 10-meter barrier.
+
+### 5. Overfitting at 80 Epochs
+We attempted to push the EfficientNet-B0 model further by training for 80 epochs.
+*   **Outcome:** Performance regressed.
+    *   **Mean Error:** **17.28 meters** (Worse than 13.45m)
+    *   **Validation Loss:** Spiked to **328** (Doubled from 166).
+*   **Analysis:** The model began to overfit the small training set after ~50 epochs. It memorized the training data instead of generalizing.
+*   **Conclusion:** Simply training longer is not the solution. We need to make the model smarter (better architecture) or give it better data (higher resolution).

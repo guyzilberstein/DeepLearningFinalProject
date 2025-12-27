@@ -53,28 +53,57 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
 
     # 2. Prepare Dataset
     full_dataset = CampusDataset(csv_file=csv_file, root_dir=img_dir)
-    total_len = len(full_dataset)
     
-    # Define Split Ratios: 70% Train, 15% Val, 15% Test
-    train_size = int(0.70 * total_len)
-    val_size = int(0.15 * total_len)
-    test_size = total_len - train_size - val_size
+    # Read CSV for stratification
+    df = pd.read_csv(csv_file)
+    indices = np.arange(len(df))
     
-    # Fix the seed for reproducibility so Test set remains constant across runs
-    generator = torch.Generator().manual_seed(42)
+    # We use 'source_file' column for stratification to ensure all locations are represented
+    stratify_labels = df['source_file'].values
     
-    train_dataset, val_dataset, test_dataset = random_split(
-        full_dataset, 
-        [train_size, val_size, test_size],
-        generator=generator
+    # First split: Separate Test (5%) from the rest (95%)
+    # Stratify by location (source_file)
+    from sklearn.model_selection import train_test_split
+    
+    train_val_idx, test_idx = train_test_split(
+        indices, 
+        test_size=0.05, 
+        stratify=stratify_labels, 
+        random_state=42
     )
     
+    # Get labels for the remaining train_val set for the next split
+    train_val_labels = stratify_labels[train_val_idx]
+    
+    # Second split: Separate Validation (10% of total) from the remaining 95%
+    # The remaining 85% of total becomes the Training set.
+    # Val share of remaining = 0.10 / 0.95 = ~0.1053
+    val_share_of_remaining = 0.10 / 0.95
+    
+    train_idx, val_idx = train_test_split(
+        train_val_idx, 
+        test_size=val_share_of_remaining, 
+        stratify=train_val_labels, 
+        random_state=42
+    )
+    
+    # Create Subsets
+    train_dataset = Subset(full_dataset, train_idx)
+    val_dataset = Subset(full_dataset, val_idx)
+    test_dataset = Subset(full_dataset, test_idx)
+    
+    # Verify split distribution in Test set (Optional, for logging)
+    print("\nTest Set Distribution by Location:")
+    test_df = df.iloc[test_idx]
+    print(test_df['source_file'].value_counts())
+    print("-" * 30)
+    
     # Save the test indices so evaluate.py knows which images are in the test set
-    test_indices = test_dataset.indices
+    test_indices = test_idx  # test_idx is already a numpy array of indices
     np.save(os.path.join(output_dir, 'test_indices.npy'), test_indices)
     print(f"Saved {len(test_indices)} test indices to outputs/test_indices.npy")
     
-    print(f"Dataset Split: {train_size} Train, {val_size} Val, {test_size} Test")
+    print(f"Dataset Split: {len(train_dataset)} Train, {len(val_dataset)} Val, {len(test_dataset)} Test")
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
@@ -85,11 +114,15 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
     
     model = CampusLocator().to(device)
     
-    # Define BOTH loss functions
-    train_criterion = WeightedMSELoss() # For learning (trust good data more)
-    val_criterion = nn.MSELoss()        # For evaluation (treat all test points equally)
+    # Define Loss function
+    # User Experiment: Switch to Standard MSE (Ignore GPS Accuracy weights)
+    # We found that 1/sigma^2 was too aggressive (56x difference between best and worst)
+    criterion = nn.MSELoss()
     
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    
+    # Scheduler: Reduce LR by factor of 0.1 if val_loss doesn't improve for 3 epochs
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3)
     
     best_model_wts = copy.deepcopy(model.state_dict())
     best_loss = float('inf')
@@ -113,28 +146,27 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
             for inputs, labels, weights in dataloader:
                 inputs = inputs.to(device)
                 labels = labels.to(device)
-                weights = weights.to(device)
+                # We ignore weights now
                 
                 optimizer.zero_grad()
                 
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs = model(inputs)
+                    loss = criterion(outputs, labels)
                     
                     if phase == 'train':
-                        # Training: Use Weighted Loss
-                        loss = train_criterion(outputs, labels, weights)
                         loss.backward()
                         optimizer.step()
-                    else:
-                        # Validation: Use Standard MSE Loss
-                        # We ignore weights here, simulating real-world usage where we don't know accuracy
-                        loss = val_criterion(outputs, labels)
                         
                 running_loss += loss.item() * inputs.size(0)
-                
+            
             epoch_loss = running_loss / len(dataloader.dataset)
             
             print(f'{phase} Loss: {epoch_loss:.4f}')
+            
+            # Step the scheduler on validation loss
+            if phase == 'val':
+                scheduler.step(epoch_loss)
             
             # Deep copy the model if it's the best one so far
             if phase == 'val' and epoch_loss < best_loss:
