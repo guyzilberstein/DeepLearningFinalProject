@@ -1,12 +1,14 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 import sys
 import contextily as ctx
 import pandas as pd
+from PIL import Image
 
 # Ensure we can import from src
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -28,42 +30,38 @@ def denormalize_to_latlon(x_meters, y_meters, ref_lat, ref_lon):
 
 def latlon_to_web_mercator(lat, lon):
     """Convert Lat/Lon to Web Mercator (EPSG:3857) for contextily"""
-    # Earth radius
     r = 6378137.0
-    
     x = np.radians(lon) * r
     y = np.log(np.tan(np.pi/4 + np.radians(lat)/2)) * r
     return x, y
 
-def visualize_results():
+def visualize_test_samples():
     # 1. Setup
     csv_file = os.path.join(project_root, 'data', 'dataset.csv')
     img_dir = os.path.join(project_root, 'data', 'processed_images')
     model_path = os.path.join(project_root, 'checkpoints', 'best_campus_locator.pth')
-    output_plot = os.path.join(project_root, 'outputs', 'results_visualization.png')
+    indices_path = os.path.join(project_root, 'outputs', 'test_indices.npy')
+    output_plot = os.path.join(project_root, 'outputs', 'test_samples_visualization.png')
     
     if not os.path.exists(model_path):
-        print(f"Model file {model_path} not found. Run train.py first.")
+        print("Model not found.")
+        return
+    if not os.path.exists(indices_path):
+        print("Test indices not found.")
         return
 
-    # Get Reference Point for Coordinate Conversion
+    # Load Reference Point
     df_temp = pd.read_csv(csv_file)
     ref_lat = df_temp['lat'].mean()
     ref_lon = df_temp['lon'].mean()
 
     # 2. Load Data
     full_dataset = CampusDataset(csv_file=csv_file, root_dir=img_dir)
+    test_indices = np.load(indices_path)
+    test_dataset = Subset(full_dataset, test_indices)
+    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
     
-    # Select Random Indices
-    num_samples = 20
-    # Ensure we don't ask for more samples than exist
-    num_samples = min(num_samples, len(full_dataset))
-    indices = np.random.choice(len(full_dataset), num_samples, replace=False)
-    
-    dataset = torch.utils.data.Subset(full_dataset, indices)
-    dataloader = DataLoader(dataset, batch_size=num_samples, shuffle=False)
-    
-    # 3. Load Model
+    # 3. Run Inference on ALL Test Data to find interesting samples
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
     
@@ -71,108 +69,140 @@ def visualize_results():
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
     
-    all_preds_local = []
-    all_labels_local = []
+    all_preds = []
+    all_labels = []
+    all_indices = [] # Indices in the FULL dataset
     
-    print("Running inference for visualization...")
-    
+    print("Running inference on test set...")
+    current_idx = 0
     with torch.no_grad():
-        for inputs, labels, weights in dataloader:
+        for inputs, labels, weights in test_loader:
             inputs = inputs.to(device)
             outputs = model(inputs)
             
-            all_preds_local.append(outputs.cpu().numpy())
-            all_labels_local.append(labels.numpy())
+            # Keep track of which original indices these are
+            batch_size = inputs.size(0)
+            batch_indices = test_indices[current_idx : current_idx + batch_size]
+            current_idx += batch_size
             
-    all_preds_local = np.vstack(all_preds_local)
-    all_labels_local = np.vstack(all_labels_local)
+            all_preds.append(outputs.cpu().numpy())
+            all_labels.append(labels.numpy())
+            all_indices.extend(batch_indices)
+            
+    all_preds = np.vstack(all_preds)
+    all_labels = np.vstack(all_labels)
+    all_indices = np.array(all_indices)
     
-    # 4. Convert Local Metrics -> Lat/Lon -> Web Mercator (EPSG:3857)
-    # We need Web Mercator for the Map Tiles
+    # Calculate Errors
+    errors = np.linalg.norm(all_preds - all_labels, axis=1)
     
-    # Calculate Lat/Lon
-    pred_lat, pred_lon = denormalize_to_latlon(all_preds_local[:,0], all_preds_local[:,1], ref_lat, ref_lon)
-    true_lat, true_lon = denormalize_to_latlon(all_labels_local[:,0], all_labels_local[:,1], ref_lat, ref_lon)
-    ref_lat_wm, ref_lon_wm = latlon_to_web_mercator(ref_lat, ref_lon)
+    # 4. Select Samples: Top 15 Best, 10 Random, 25 Worst (Total 50)
+    sorted_idxs = np.argsort(errors)
     
-    # Calculate Web Mercator X/Y
-    pred_x_wm, pred_y_wm = latlon_to_web_mercator(pred_lat, pred_lon)
-    true_x_wm, true_y_wm = latlon_to_web_mercator(true_lat, true_lon)
+    best_idxs = sorted_idxs[:15]
+    worst_idxs = sorted_idxs[-25:]
+    
+    # Random indices (excluding best/worst)
+    remaining_idxs = sorted_idxs[15:-25]
+    if len(remaining_idxs) > 0:
+        random_idxs = np.random.choice(remaining_idxs, 10, replace=False)
+    else:
+        random_idxs = []
+        
+    selected_indices_local = np.concatenate([best_idxs, random_idxs, worst_idxs])
+    
+    # Labels
+    selected_labels = ["Best Result"] * len(best_idxs) + \
+                      ["Random"] * len(random_idxs) + \
+                      ["Worst Result"] * len(worst_idxs)
     
     # 5. Plotting
-    fig = plt.figure(figsize=(16, 8))
-    gs = fig.add_gridspec(1, 2, width_ratios=[2, 1])
+    num_samples = len(selected_indices_local) # Should be 50
+    cols = 5
+    rows = 10 # 5x10 = 50
     
-    # --- Main Map Plot ---
-    ax_map = fig.add_subplot(gs[0])
+    # We want a grid where each "Cell" has Image (top) and Map (bottom)
+    # So we need 2 * rows grid (20 rows, 5 cols)
     
-    # Calculate errors in meters (using the original local coordinates is accurate enough)
-    errors = np.linalg.norm(all_preds_local - all_labels_local, axis=1)
+    fig = plt.figure(figsize=(25, 60)) # Increase height significantly
+    gs = gridspec.GridSpec(rows * 2, cols, height_ratios=[3, 2] * rows)
     
-    # Plot Actual GPS (Blue circles)
-    # Increased size (s=150)
-    ax_map.scatter(true_x_wm, true_y_wm, c='blue', alpha=0.5, label='Actual GPS', s=150, edgecolors='white', linewidth=2, zorder=3)
+    print(f"Plotting {num_samples} samples...")
     
-    # Plot Predicted GPS (Color-coded by error)
-    # Increased size (s=150)
-    sc = ax_map.scatter(pred_x_wm, pred_y_wm, c=errors, cmap='RdYlGn_r', 
-                        alpha=0.9, label='Predicted', s=150, edgecolors='black', linewidth=1.5, vmin=0, vmax=30, zorder=4)
-    
-    # Draw error lines
-    for i in range(len(true_x_wm)):
-        ax_map.plot([true_x_wm[i], pred_x_wm[i]], [true_y_wm[i], pred_y_wm[i]], 
-                    color='black', alpha=0.4, linestyle='--', linewidth=1, zorder=2)
+    for i, idx_local in enumerate(selected_indices_local):
+        row = (i // cols) * 2
+        col = i % cols
         
-    ax_map.set_title(f"Campus Localization Results (N={num_samples})", fontsize=14)
-    ax_map.set_xlabel("Longitude (Web Mercator)", fontsize=10)
-    ax_map.set_ylabel("Latitude (Web Mercator)", fontsize=10)
-    
-    # Add 20% margin to zoom out
-    x_min, x_max = ax_map.get_xlim()
-    y_min, y_max = ax_map.get_ylim()
-    margin_x = (x_max - x_min) * 0.2
-    margin_y = (y_max - y_min) * 0.2
-    ax_map.set_xlim(x_min - margin_x, x_max + margin_x)
-    ax_map.set_ylim(y_min - margin_y, y_max + margin_y)
-    
-    # Turn off axis numbers as they are large Web Mercator coordinates
-    ax_map.set_xticks([])
-    ax_map.set_yticks([])
-    
-    # Add Base Map (OpenStreetMap)
-    # crs=3857 tells contextily we are providing Web Mercator coordinates
-    try:
-        ctx.add_basemap(ax_map, source=ctx.providers.OpenStreetMap.Mapnik, crs='EPSG:3857', zoom='auto')
-    except Exception as e:
-        print(f"Could not fetch map tiles: {e}")
-        print("Continuing without background map...")
-    
-    ax_map.legend()
-    
-    # Add colorbar
-    cbar = plt.colorbar(sc, ax=ax_map)
-    cbar.set_label('Error Distance (meters)', rotation=270, labelpad=15)
-    
-    # --- Error Distribution Histogram ---
-    ax_hist = fig.add_subplot(gs[1])
-    
-    mean_error = np.mean(errors)
-    median_error = np.median(errors)
-    
-    ax_hist.hist(errors, bins=10, color='skyblue', edgecolor='black', alpha=0.7)
-    ax_hist.axvline(mean_error, color='red', linestyle='dashed', linewidth=2, label=f'Mean: {mean_error:.1f}m')
-    ax_hist.axvline(median_error, color='green', linestyle='dashed', linewidth=2, label=f'Median: {median_error:.1f}m')
-    
-    ax_hist.set_title("Error Distribution", fontsize=14)
-    ax_hist.set_xlabel("Error (meters)", fontsize=12)
-    ax_hist.set_ylabel("Count", fontsize=12)
-    ax_hist.legend()
-    ax_hist.grid(True, alpha=0.3)
-    
+        # Data
+        idx_global = all_indices[idx_local]
+        pred_local = all_preds[idx_local]
+        true_local = all_labels[idx_local]
+        error_m = errors[idx_local]
+        
+        # Load Raw Image
+        img_name = full_dataset.data_frame.iloc[idx_global]['filename']
+        img_path = os.path.join(img_dir, img_name)
+        try:
+            image = Image.open(img_path)
+        except Exception:
+            image = None
+            
+        # Coordinates
+        p_lat, p_lon = denormalize_to_latlon(pred_local[0], pred_local[1], ref_lat, ref_lon)
+        t_lat, t_lon = denormalize_to_latlon(true_local[0], true_local[1], ref_lat, ref_lon)
+        
+        px, py = latlon_to_web_mercator(p_lat, p_lon)
+        tx, ty = latlon_to_web_mercator(t_lat, t_lon)
+        
+        # --- Plot Image ---
+        ax_img = fig.add_subplot(gs[row, col])
+        if image:
+            ax_img.imshow(image)
+        else:
+            ax_img.text(0.5, 0.5, "Img Not Found", ha='center')
+        ax_img.set_xticks([])
+        ax_img.set_yticks([])
+        
+        # Color title based on error
+        color = 'green' if error_m < 15 else 'orange' if error_m < 40 else 'red'
+        ax_img.set_title(f"{selected_labels[i]}\nError: {error_m:.1f}m", color=color, fontweight='bold', fontsize=12)
+        
+        # --- Plot Map ---
+        ax_map = fig.add_subplot(gs[row + 1, col])
+        
+        # Scatter
+        ax_map.scatter(tx, ty, c='lime', s=100, edgecolors='black', label='True', zorder=5)
+        ax_map.scatter(px, py, c='red', s=100, edgecolors='black', label='Pred', zorder=5)
+        
+        # Line
+        ax_map.plot([tx, px], [ty, py], 'k--', alpha=0.6, zorder=4)
+        
+        # Set Bounds (margin around points)
+        margin = 100 # meters (web mercator units are meters approx)
+        # Dynamically scale margin based on error, but keep minimum
+        dynamic_margin = max(margin, error_m * 1.5)
+        
+        center_x = (tx + px) / 2
+        center_y = (ty + py) / 2
+        
+        ax_map.set_xlim(center_x - dynamic_margin, center_x + dynamic_margin)
+        ax_map.set_ylim(center_y - dynamic_margin, center_y + dynamic_margin)
+        
+        ax_map.set_xticks([])
+        ax_map.set_yticks([])
+        
+        # Add Tiles
+        try:
+            ctx.add_basemap(ax_map, source=ctx.providers.OpenStreetMap.Mapnik, crs='EPSG:3857', zoom='auto')
+        except:
+            pass
+            
+        if i == 0:
+            ax_map.legend(loc='upper right', fontsize='x-small')
+
     plt.tight_layout()
-    plt.savefig(output_plot, dpi=300)
-    print(f"Visualization saved to {output_plot}")
-    plt.show()
+    plt.savefig(output_plot, dpi=150)
+    print(f"Saved visualization to {output_plot}")
 
 if __name__ == "__main__":
-    visualize_results()
+    visualize_test_samples()

@@ -61,12 +61,26 @@ class CampusDataset(Dataset):
         if pd.isna(gps_accuracy):
             gps_accuracy = 10.0
             
+        # Get Z-Score (default to 0 if missing)
+        z_score = self.data_frame.iloc[idx].get('gps_z_score', 0.0)
+        if pd.isna(z_score):
+            z_score = 0.0
+            
         # Convert labels to a Tensor (float32 is standard for regression)
         labels = torch.tensor([label_x, label_y], dtype=torch.float32)
         
         # Inverse variance weighting is common: weight = 1 / (sigma^2)
         # Avoid division by zero by clamping min accuracy
         sigma = max(float(gps_accuracy), 1.0)
-        weight = torch.tensor([1.0 / (sigma**2)], dtype=torch.float32)
+        base_weight = 1.0 / (sigma**2)
+        
+        # Reliability Penalty: Weighted by Z-Score
+        # If z_score > 0 (worse than average for area), reduce weight
+        # If z_score <= 0 (better than average), keep full weight (factor = 1.0)
+        reliability_factor = 1.0 / (1.0 + max(0.0, float(z_score)))
+        
+        final_weight = base_weight * reliability_factor
+        
+        weight = torch.tensor([final_weight], dtype=torch.float32)
         
         return image_tensor, labels, weight
