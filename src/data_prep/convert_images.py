@@ -65,17 +65,21 @@ def preprocess_images(source_folder, dest_folder, target_size=(256, 256)):
     print(f"Time taken: {end_time - start_time:.2f} seconds.")
 
 if __name__ == "__main__":
-    # Default paths assuming script is run from src/data_prep/
+    # Default paths assuming script is run from project root
     script_dir = os.path.dirname(os.path.abspath(__file__))
     project_root = os.path.dirname(os.path.dirname(script_dir))
     
     source_dir = os.path.join(project_root, "data", "raw_photos")
-    dest_dir = os.path.join(project_root, "data", "processed_images")
+    
+    # Target size for EfficientNet-B0 (close to native 224x224)
+    TARGET_SIZE = 256
+    dest_dir = os.path.join(project_root, "data", f"processed_images_{TARGET_SIZE}")
     
     print(f"Source: {source_dir}")
     print(f"Destination: {dest_dir}")
+    print(f"Target size: {TARGET_SIZE}x{TARGET_SIZE}")
     
     if not os.path.exists(source_dir):
         print(f"Error: Source directory {source_dir} does not exist.")
     else:
-        preprocess_images(source_dir, dest_dir)
+        preprocess_images(source_dir, dest_dir, target_size=(TARGET_SIZE, TARGET_SIZE))

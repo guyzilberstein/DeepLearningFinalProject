@@ -14,11 +14,19 @@ if project_root not in sys.path:
 from src.model.dataset import CampusDataset
 from src.model.network import CampusLocator
 
-def evaluate_model():
+def evaluate_model(experiment_name="default"):
+    """
+    Evaluate the model on the test set.
+    Args:
+        experiment_name: Name of the experiment to evaluate (matches checkpoint name)
+    """
     # 1. Setup
     csv_file = os.path.join(project_root, 'data', 'dataset.csv')
-    img_dir = os.path.join(project_root, 'data', 'processed_images')
-    model_path = os.path.join(project_root, 'checkpoints', 'best_campus_locator.pth')
+    img_dir = os.path.join(project_root, 'data', 'processed_images_256')
+    
+    # Checkpoint path based on experiment name
+    checkpoint_filename = f'best_{experiment_name}.pth' if experiment_name != "default" else 'best_campus_locator.pth'
+    model_path = os.path.join(project_root, 'checkpoints', checkpoint_filename)
     indices_path = os.path.join(project_root, 'outputs', 'test_indices.npy')
     
     if not os.path.exists(model_path):
@@ -36,6 +44,7 @@ def evaluate_model():
     test_dataset = Subset(full_dataset, test_indices)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
     
+    print(f"=== Evaluating Experiment: {experiment_name} ===")
     print(f"Evaluating on {len(test_dataset)} test samples...")
     
     # 3. Load Model
@@ -49,6 +58,8 @@ def evaluate_model():
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
         print(f"Loaded model with best_loss: {checkpoint.get('best_loss', 'N/A')}")
+        if 'experiment' in checkpoint:
+            print(f"Experiment name in checkpoint: {checkpoint['experiment']}")
     else:
         # Old format: checkpoint IS the state_dict
         model.load_state_dict(checkpoint)
@@ -66,9 +77,7 @@ def evaluate_model():
             outputs = model(inputs)
             
             # Calculate Euclidean distance for each point in batch
-            # shape: [batch_size, 2]
             diff = outputs - labels
-            # Norm along dim 1
             batch_errors = torch.norm(diff, dim=1)
             
             total_error += batch_errors.sum().item()
@@ -81,6 +90,12 @@ def evaluate_model():
     print(f"Test Set Mean Error:   {mean_error:.2f} meters")
     print(f"Test Set Median Error: {median_error:.2f} meters")
     print("-" * 30)
+    
+    return mean_error, median_error
 
 if __name__ == "__main__":
-    evaluate_model()
+    # Check for command line argument
+    if len(sys.argv) > 1:
+        evaluate_model(experiment_name=sys.argv[1])
+    else:
+        evaluate_model()

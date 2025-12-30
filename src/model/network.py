@@ -1,22 +1,26 @@
-import torch
 import torch.nn as nn
-import torchvision.models as models
+from torchvision import models
 
 class CampusLocator(nn.Module):
     def __init__(self):
-        super().__init__()
-        
-        # 1. Load a pre-trained EfficientNet-B0
-        # More efficient and accurate than ResNet-18 for small datasets
+        super(CampusLocator, self).__init__()
+        # EfficientNet-B0 backbone with pretrained ImageNet weights
+        # Best fit for ~1800 images (5.3M params)
         self.backbone = models.efficientnet_b0(weights='DEFAULT')
         
-        # 2. Modify the output layer ("The Head")
-        # EfficientNet's classifier is a Sequential block, the final linear layer is [1]
-        # It typically has 1280 input features
-        input_features = self.backbone.classifier[1].in_features
-        self.backbone.classifier[1] = nn.Linear(input_features, 2)
+        # Get input features of the final layer (1280 for B0)
+        in_features = self.backbone.classifier[1].in_features
         
+        # Replace classifier with a Regression MLP Head
+        # MLP allows non-linear relationships between features and GPS
+        self.backbone.classifier = nn.Sequential(
+            nn.Linear(in_features, 512),
+            nn.ReLU(),
+            nn.Dropout(0.3),          # Regularization
+            nn.Linear(512, 128),
+            nn.ReLU(),
+            nn.Linear(128, 2)         # Output: x_meters, y_meters
+        )
+
     def forward(self, x):
-        # This function defines the flow of data
-        # Image Tensor -> Backbone -> 2 Coordinates
         return self.backbone(x)

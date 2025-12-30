@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split, Subset
+from torch.cuda.amp import GradScaler, autocast
 import os
 import copy
 import numpy as np
@@ -18,26 +19,64 @@ if project_root not in sys.path:
 from src.model.dataset import CampusDataset
 from src.model.network import CampusLocator
 
-# Custom Weighted MSE Loss
-class WeightedMSELoss(nn.Module):
-    def __init__(self):
-        super().__init__()
-        
-    def forward(self, prediction, target, weights):
-        # weights shape might be [batch_size, 1]
-        # prediction, target shape: [batch_size, 2]
-        
-        squared_errors = (prediction - target) ** 2
-        # Sum errors for x and y, then apply weight
-        weighted_errors = squared_errors * weights
-        
-        # Mean over the batch
-        return weighted_errors.mean()
 
-def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
-    # 1. Setup Paths
+def get_device_config():
+    """
+    Auto-detect device and return optimal settings for that hardware.
+    Returns: (device, batch_size, num_workers, pin_memory, use_amp)
+    """
+    if torch.cuda.is_available():
+        # GPU cluster - enable all optimizations
+        device = torch.device("cuda")
+        batch_size = 32  # Larger batch for GPU
+        num_workers = 4  # Multi-process data loading
+        pin_memory = True  # Faster CPU→GPU transfer
+        use_amp = True  # Mixed precision for ~2x speedup
+        # Optimize convolution algorithms
+        torch.backends.cudnn.benchmark = True
+    elif torch.backends.mps.is_available():
+        # Mac with Apple Silicon
+        device = torch.device("mps")
+        batch_size = 8  # Conservative for MPS memory
+        num_workers = 0  # MPS doesn't benefit from multiprocessing
+        pin_memory = False
+        use_amp = False  # MPS doesn't support AMP well
+    else:
+        # CPU fallback
+        device = torch.device("cpu")
+        batch_size = 16
+        num_workers = 2
+        pin_memory = False
+        use_amp = False
+    
+    return device, batch_size, num_workers, pin_memory, use_amp
+
+
+def train_model(num_epochs=25, batch_size=None, learning_rate=0.0001, experiment_name="default", resume=False):
+    """
+    Train the model.
+    Args:
+        num_epochs: Number of training epochs
+        batch_size: Batch size (auto-detected if None)
+        learning_rate: Initial learning rate
+        experiment_name: Name for this experiment (used for checkpoint naming)
+        resume: If True, load weights from existing checkpoint and continue training
+    """
+    # 1. Setup Device & Config
+    device, auto_batch_size, num_workers, pin_memory, use_amp = get_device_config()
+    
+    # Use provided batch_size or auto-detected
+    if batch_size is None:
+        batch_size = auto_batch_size
+    
+    print(f"=== Experiment: {experiment_name} ===")
+    print(f"Device: {device}")
+    print(f"Config: batch_size={batch_size}, num_workers={num_workers}, pin_memory={pin_memory}, use_amp={use_amp}")
+    print(f"Resume: {resume}")
+    
+    # 2. Setup Paths
     csv_file = os.path.join(project_root, 'data', 'dataset.csv')
-    img_dir = os.path.join(project_root, 'data', 'processed_images')
+    img_dir = os.path.join(project_root, 'data', 'processed_images_256')
     checkpoint_dir = os.path.join(project_root, 'checkpoints')
     output_dir = os.path.join(project_root, 'outputs')
     
@@ -51,9 +90,9 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
     if not os.path.exists(img_dir):
         raise FileNotFoundError(f"Processed images not found at {img_dir}. Run convert_images.py first.")
 
-    # 2. Prepare Dataset
-    # Using is_train=False for both to disable data augmentation (restore best baseline)
-    full_dataset_train = CampusDataset(csv_file=csv_file, root_dir=img_dir, is_train=False)
+    # 3. Prepare Dataset
+    # Training dataset with augmentation, validation without
+    full_dataset_train = CampusDataset(csv_file=csv_file, root_dir=img_dir, is_train=True)
     full_dataset_val   = CampusDataset(csv_file=csv_file, root_dir=img_dir, is_train=False)
     
     # Read CSV for stratification
@@ -63,13 +102,13 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
     # We use 'source_file' column for stratification to ensure all locations are represented
     stratify_labels = df['source_file'].values
     
-    # First split: Separate Test (5%) from the rest (95%)
+    # First split: Separate Test (10%) from the rest (90%)
     # Stratify by location (source_file)
     from sklearn.model_selection import train_test_split
     
     train_val_idx, test_idx = train_test_split(
         indices, 
-        test_size=0.05, 
+        test_size=0.10, 
         stratify=stratify_labels, 
         random_state=42
     )
@@ -77,10 +116,10 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
     # Get labels for the remaining train_val set for the next split
     train_val_labels = stratify_labels[train_val_idx]
     
-    # Second split: Separate Validation (10% of total) from the remaining 95%
-    # The remaining 85% of total becomes the Training set.
-    # Val share of remaining = 0.10 / 0.95 = ~0.1053
-    val_share_of_remaining = 0.10 / 0.95
+    # Second split: Separate Validation (10% of total) from the remaining 90%
+    # The remaining 80% of total becomes the Training set.
+    # Val share of remaining = 0.10 / 0.90 = ~0.1111
+    val_share_of_remaining = 0.10 / 0.90
     
     train_idx, val_idx = train_test_split(
         train_val_idx, 
@@ -90,7 +129,6 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
     )
     
     # Create Subsets
-    # Use the Augmentation dataset for Train, and the Clean dataset for Val/Test
     train_dataset = Subset(full_dataset_train, train_idx)
     val_dataset = Subset(full_dataset_val, val_idx)
     test_dataset = Subset(full_dataset_val, test_idx)
@@ -102,50 +140,71 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
     print("-" * 30)
     
     # Save the test indices so evaluate.py knows which images are in the test set
-    test_indices = test_idx  # test_idx is already a numpy array of indices
+    test_indices = test_idx
     np.save(os.path.join(output_dir, 'test_indices.npy'), test_indices)
     print(f"Saved {len(test_indices)} test indices to outputs/test_indices.npy")
     
     print(f"Dataset Split: {len(train_dataset)} Train, {len(val_dataset)} Val, {len(test_dataset)} Test")
     
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, 
+                              num_workers=num_workers, pin_memory=pin_memory)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False,
+                            num_workers=num_workers, pin_memory=pin_memory)
     
-    # 3. Initialize Model, Loss, Optimizer
-    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-    print(f"Using device: {device}")
-    
+    # 4. Initialize Model, Loss, Optimizer
     model = CampusLocator().to(device)
     
-    # Define Loss function
-    # User Experiment: Switch to Standard MSE (Ignore GPS Accuracy weights)
-    # We found that 1/sigma^2 was too aggressive (56x difference between best and worst)
-    criterion = nn.MSELoss()
+    # HuberLoss handles outliers better than MSELoss
+    # Linear for large errors (noisy GPS), quadratic for small errors (fine-tuning)
+    criterion = nn.HuberLoss(delta=1.0)
     
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    # Weight decay (L2 regularization) helps prevent overfitting
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     
-    # Scheduler: Reduce LR by factor of 0.1 if val_loss doesn't improve for 3 epochs
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=3)
+    # Scheduler: Reduce LR by factor of 0.5 if val_loss doesn't improve for 7 epochs
+    # Changed from patience=3 to patience=7 to avoid premature LR reduction
+    # Changed factor from 0.1 to 0.5 for gentler reduction
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=7)
+    
+    # Mixed Precision Scaler (only used if use_amp=True)
+    scaler = GradScaler(enabled=use_amp)
     
     best_model_wts = copy.deepcopy(model.state_dict())
     best_loss = float('inf')
+    start_epoch = 0
     
-    # Load previous best loss if checkpoint exists (to avoid overwriting a better model)
-    checkpoint_path = os.path.join(checkpoint_dir, 'best_campus_locator.pth')
+    # Checkpoint path based on experiment name
+    checkpoint_filename = f'best_{experiment_name}.pth' if experiment_name != "default" else 'best_campus_locator.pth'
+    checkpoint_path = os.path.join(checkpoint_dir, checkpoint_filename)
+    
+    # Load checkpoint if exists
     if os.path.exists(checkpoint_path):
         try:
             existing_checkpoint = torch.load(checkpoint_path, map_location=device)
             if isinstance(existing_checkpoint, dict) and 'best_loss' in existing_checkpoint:
                 best_loss = existing_checkpoint['best_loss']
-                print(f"Loaded existing best_loss: {best_loss:.4f} (will only save if we beat this)")
+                
+                if resume:
+                    # Resume training: load model weights and optimizer state
+                    model.load_state_dict(existing_checkpoint['model_state_dict'])
+                    if 'optimizer_state_dict' in existing_checkpoint:
+                        optimizer.load_state_dict(existing_checkpoint['optimizer_state_dict'])
+                    if 'epoch' in existing_checkpoint:
+                        start_epoch = existing_checkpoint['epoch'] + 1
+                    print(f"RESUMING from epoch {start_epoch}, best_loss: {best_loss:.4f}")
+                else:
+                    print(f"Loaded existing best_loss: {best_loss:.4f} (will only save if we beat this)")
             else:
                 print("Existing checkpoint found but no best_loss recorded. Will overwrite if any improvement.")
         except Exception as e:
             print(f"Could not load existing checkpoint: {e}. Starting fresh.")
+    elif resume:
+        print(f"WARNING: resume=True but no checkpoint found at {checkpoint_path}. Starting fresh.")
     
-    # 4. Training Loop
+    # 5. Training Loop
     for epoch in range(num_epochs):
-        print(f'Epoch {epoch+1}/{num_epochs}')
+        actual_epoch = start_epoch + epoch if resume else epoch
+        print(f'Epoch {actual_epoch+1}/{start_epoch + num_epochs if resume else num_epochs}')
         print('-' * 10)
         
         # Each epoch has a training and validation phase
@@ -162,17 +221,20 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
             for inputs, labels, weights in dataloader:
                 inputs = inputs.to(device)
                 labels = labels.to(device)
-                # We ignore weights now
                 
                 optimizer.zero_grad()
                 
+                # Mixed precision forward pass
                 with torch.set_grad_enabled(phase == 'train'):
-                    outputs = model(inputs)
-                    loss = criterion(outputs, labels)
+                    with autocast(enabled=use_amp):
+                        outputs = model(inputs)
+                        loss = criterion(outputs, labels)
                     
                     if phase == 'train':
-                        loss.backward()
-                        optimizer.step()
+                        # Scaled backward pass for mixed precision
+                        scaler.scale(loss).backward()
+                        scaler.step(optimizer)
+                        scaler.update()
                         
                 running_loss += loss.item() * inputs.size(0)
             
@@ -188,13 +250,15 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
             if phase == 'val' and epoch_loss < best_loss:
                 best_loss = epoch_loss
                 best_model_wts = copy.deepcopy(model.state_dict())
-                save_path = os.path.join(checkpoint_dir, 'best_campus_locator.pth')
-                # Save both model weights and best_loss so we can compare across runs
+                # Save model weights, optimizer state, epoch, and best_loss
                 torch.save({
+                    'epoch': actual_epoch,
                     'model_state_dict': model.state_dict(),
-                    'best_loss': best_loss
-                }, save_path)
-                print(f"New best model saved to {save_path} (loss: {best_loss:.4f})")
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'best_loss': best_loss,
+                    'experiment': experiment_name
+                }, checkpoint_path)
+                print(f"New best model saved to {checkpoint_path} (loss: {best_loss:.4f})")
 
     print(f'Best val loss: {best_loss:.4f}')
     
