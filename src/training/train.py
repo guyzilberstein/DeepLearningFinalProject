@@ -52,8 +52,8 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
         raise FileNotFoundError(f"Processed images not found at {img_dir}. Run convert_images.py first.")
 
     # 2. Prepare Dataset
-    # We need two instances: one with augmentation (Train) and one without (Val/Test)
-    full_dataset_train = CampusDataset(csv_file=csv_file, root_dir=img_dir, is_train=True)
+    # Using is_train=False for both to disable data augmentation (restore best baseline)
+    full_dataset_train = CampusDataset(csv_file=csv_file, root_dir=img_dir, is_train=False)
     full_dataset_val   = CampusDataset(csv_file=csv_file, root_dir=img_dir, is_train=False)
     
     # Read CSV for stratification
@@ -130,6 +130,19 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
     best_model_wts = copy.deepcopy(model.state_dict())
     best_loss = float('inf')
     
+    # Load previous best loss if checkpoint exists (to avoid overwriting a better model)
+    checkpoint_path = os.path.join(checkpoint_dir, 'best_campus_locator.pth')
+    if os.path.exists(checkpoint_path):
+        try:
+            existing_checkpoint = torch.load(checkpoint_path, map_location=device)
+            if isinstance(existing_checkpoint, dict) and 'best_loss' in existing_checkpoint:
+                best_loss = existing_checkpoint['best_loss']
+                print(f"Loaded existing best_loss: {best_loss:.4f} (will only save if we beat this)")
+            else:
+                print("Existing checkpoint found but no best_loss recorded. Will overwrite if any improvement.")
+        except Exception as e:
+            print(f"Could not load existing checkpoint: {e}. Starting fresh.")
+    
     # 4. Training Loop
     for epoch in range(num_epochs):
         print(f'Epoch {epoch+1}/{num_epochs}')
@@ -176,8 +189,12 @@ def train_model(num_epochs=25, batch_size=16, learning_rate=0.001):
                 best_loss = epoch_loss
                 best_model_wts = copy.deepcopy(model.state_dict())
                 save_path = os.path.join(checkpoint_dir, 'best_campus_locator.pth')
-                torch.save(model.state_dict(), save_path)
-                print(f"New best model saved to {save_path}")
+                # Save both model weights and best_loss so we can compare across runs
+                torch.save({
+                    'model_state_dict': model.state_dict(),
+                    'best_loss': best_loss
+                }, save_path)
+                print(f"New best model saved to {save_path} (loss: {best_loss:.4f})")
 
     print(f'Best val loss: {best_loss:.4f}')
     

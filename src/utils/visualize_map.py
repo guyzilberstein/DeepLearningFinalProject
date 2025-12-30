@@ -54,7 +54,12 @@ def visualize_on_map():
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
     model = CampusLocator().to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    # Handle both old format (state_dict only) and new format (dict with model_state_dict)
+    checkpoint = torch.load(model_path, map_location=device)
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'])
+    else:
+        model.load_state_dict(checkpoint)
     model.eval()
     
     # 5. Initialize Map with Satellite Imagery

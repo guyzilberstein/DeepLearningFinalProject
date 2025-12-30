@@ -66,7 +66,12 @@ def visualize_test_samples():
     print(f"Using device: {device}")
     
     model = CampusLocator().to(device)
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    # Handle both old format (state_dict only) and new format (dict with model_state_dict)
+    checkpoint = torch.load(model_path, map_location=device)
+    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'])
+    else:
+        model.load_state_dict(checkpoint)
     model.eval()
     
     all_preds = []
