@@ -117,29 +117,6 @@ def apply_corrections(df: pd.DataFrame, corrections_dir: str, ref_lat: float, re
     return df
 
 
-def calculate_z_scores(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate GPS accuracy Z-scores per area."""
-    print("Calculating GPS Accuracy Z-Scores per Area...")
-    
-    # Drop existing z-score column if present
-    df = df.drop(columns=['gps_z_score'], errors='ignore')
-    
-    # Group by source_file
-    stats = df.groupby('source_file')['gps_accuracy_m'].agg(['mean', 'std']).reset_index()
-    stats.rename(columns={'mean': 'acc_mean', 'std': 'acc_std'}, inplace=True)
-    
-    df = df.merge(stats, on='source_file', how='left')
-    
-    # Handle NaN std (single sample groups) -> set std to 1
-    df['acc_std'] = df['acc_std'].fillna(1.0)
-    df['acc_std'] = df['acc_std'].replace(0, 1.0)
-    
-    df['gps_z_score'] = (df['gps_accuracy_m'] - df['acc_mean']) / df['acc_std']
-    
-    # Clean up temporary columns
-    df.drop(columns=['acc_mean', 'acc_std'], inplace=True)
-    
-    return df
 
 
 def normalize_and_save(project_root: str = None):
@@ -187,12 +164,9 @@ def normalize_and_save(project_root: str = None):
     # 5. Apply corrections
     df = apply_corrections(df, data_dir, ref_lat, ref_lon, METERS_PER_LAT, METERS_PER_LON)
     
-    # 6. Calculate Z-scores
-    df = calculate_z_scores(df)
-    
-    # 7. Save dataset
+    # 6. Save dataset
     cols_to_keep = ['filename', 'path', 'lat', 'lon', 'x_meters', 'y_meters', 
-                    'gps_accuracy_m', 'source_file', 'gps_z_score']
+                    'gps_accuracy_m', 'source_file']
     cols_to_keep = [c for c in cols_to_keep if c in df.columns]
     
     df[cols_to_keep].to_csv(output_file, index=False)
