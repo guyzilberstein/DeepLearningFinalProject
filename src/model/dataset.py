@@ -31,6 +31,12 @@ class CampusDataset(Dataset):
                 # Photometric Augmentation (Lighting invariance)
                 transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.05),
                 
+                # Night Simulation (25% of images brutally darkened)
+                # Addresses the 48% night image failure rate
+                transforms.RandomApply([
+                    transforms.ColorJitter(brightness=(0.1, 0.4), contrast=(0.1, 0.4), saturation=0.1, hue=0.01),
+                ], p=0.25),
+                
                 transforms.ToTensor(),
                 
                 # Regularization (Simulates occlusions like trees, poles, people)

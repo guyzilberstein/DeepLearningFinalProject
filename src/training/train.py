@@ -6,6 +6,7 @@ from torch.cuda.amp import GradScaler, autocast
 import os
 import copy
 import numpy as np
+import random
 import sys
 import pandas as pd
 
@@ -52,7 +53,7 @@ def get_device_config():
     return device, batch_size, num_workers, pin_memory, use_amp
 
 
-def train_model(num_epochs=25, batch_size=None, learning_rate=0.0001, experiment_name="default", resume=False):
+def train_model(num_epochs=25, batch_size=None, learning_rate=0.0001, experiment_name="default", resume=False, seed=42):
     """
     Train the model.
     Args:
@@ -61,7 +62,16 @@ def train_model(num_epochs=25, batch_size=None, learning_rate=0.0001, experiment
         learning_rate: Initial learning rate
         experiment_name: Name for this experiment (used for checkpoint naming)
         resume: If True, load weights from existing checkpoint and continue training
+        seed: Random seed for reproducibility (default: 42)
     """
+    # Set random seeds for reproducibility
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    
     # 1. Setup Device & Config
     device, auto_batch_size, num_workers, pin_memory, use_amp = get_device_config()
     
@@ -72,7 +82,7 @@ def train_model(num_epochs=25, batch_size=None, learning_rate=0.0001, experiment
     print(f"=== Experiment: {experiment_name} ===")
     print(f"Device: {device}")
     print(f"Config: batch_size={batch_size}, num_workers={num_workers}, pin_memory={pin_memory}, use_amp={use_amp}")
-    print(f"Resume: {resume}")
+    print(f"Resume: {resume}, Seed: {seed}")
     
     # 2. Setup Paths
     csv_file = os.path.join(project_root, 'data', 'dataset.csv')
