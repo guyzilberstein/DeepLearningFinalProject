@@ -24,7 +24,7 @@ def import_corrections(input_csv: str, output_name: str = "corrections_batch_new
         UnderBuilding26_IMG_7146.jpg,31.2620788,34.8023207
     
     Output format (corrections_batch):
-        WKT,filename,path,lat,lon,gps_accuracy_m,datetime,original_csv_file
+        filename,path,lat,lon,gps_accuracy_m
     """
     # Load input
     df_input = pd.read_csv(input_csv)
@@ -73,14 +73,11 @@ def import_corrections(input_csv: str, output_name: str = "corrections_batch_new
         original_csv = f"data/metadata_raw/{source_file}" if source_file else ""
         
         corrections.append({
-            'WKT': f'"POINT ({lon} {lat})"',
             'filename': os.path.basename(path),
             'path': path,
             'lat': lat,
             'lon': lon,
             'gps_accuracy_m': 7.0,
-            'datetime': '',
-            'original_csv_file': original_csv
         })
     
     if not_found:
