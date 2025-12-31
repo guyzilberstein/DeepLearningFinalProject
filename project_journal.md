@@ -586,3 +586,116 @@ This gives slight preference to high-confidence GPS labels without ignoring low-
 | **Mean Error** | **9.83 meters** |
 | **Median Error** | **7.18 meters** |
 | Models Saved | `best_b0_ensemble_s42.pth`, `best_b0_ensemble_s100.pth`, `best_b0_ensemble_s123.pth` |
+
+---
+
+**Date:** Dec 31, 2025
+
+## Data Pipeline Cleanup & Documentation
+
+### Streamlined Data Flow
+
+We reorganized the data preparation pipeline to support incremental photo additions and automatic GPS correction application:
+
+```
+raw_photos/
+    └── Building26Night/
+    └── LibraryNight/
+    └── ... (new folders)
+            │
+            ▼
+    extract_metadata.py --folders Building26Night LibraryNight
+            │
+            ▼
+    metadata_raw/*.csv  (raw GPS from EXIF)
+            │
+            ▼
+    normalize_coords.py  (auto-applies corrections_batch*.csv)
+            │
+            ▼
+    dataset.csv  (final training data with all corrections)
+```
+
+### Key Scripts
+
+#### `extract_metadata.py`
+Extracts GPS coordinates from raw HEIC photos using EXIF data.
+
+```bash
+# Extract all folders (default)
+python extract_metadata.py
+
+# Extract only specific new folders (incremental)
+python extract_metadata.py --folders Building26Night LibraryNight
+```
+
+**Output:** Creates one CSV per folder in `data/metadata_raw/`
+
+#### `normalize_coords.py`
+Merges all metadata, converts lat/lon to local X/Y meters, and **automatically applies all corrections**.
+
+```bash
+python normalize_coords.py
+```
+
+**Output:**
+```
+Found 9 CSV files: ['Building28Area.csv', 'LibraryArea.csv', ...]
+Total samples loaded: 1873
+
+Applying corrections from 4 file(s)...
+  corrections_batch1.csv: 62 corrections
+  corrections_batch2.csv: 62 corrections
+  corrections_batch3.csv: 61 corrections
+  corrections_batch4.csv: 3 corrections
+  Total updated: 188 samples
+
+Saved to dataset.csv
+```
+
+### GPS Correction Workflow
+
+When model predictions reveal potential GPS label errors, use this workflow to fix them:
+
+#### Step 1: Export Worst Predictions
+```bash
+python src/utils/export_worst_for_audit.py --num 25
+```
+Creates `outputs/worst_for_maps.csv` with simple format: `name, latitude, longitude`
+
+#### Step 2: Review in Google Maps
+1. Go to [mymaps.google.com](https://mymaps.google.com)
+2. Create new map → Import → Select `worst_for_maps.csv`
+3. Drag points to correct locations
+4. Export or note the corrected coordinates
+
+#### Step 3: Import Corrections
+```bash
+python src/utils/import_corrections.py corrected_coords.csv --output corrections_batch5.csv
+```
+Converts simple coordinate CSV to corrections format.
+
+#### Step 4: Regenerate Dataset
+```bash
+python src/data_prep/normalize_coords.py
+```
+Applies all corrections (batch1-5) and regenerates `dataset.csv`.
+
+### Correction File Format (Simplified)
+
+Corrections now use a minimal 5-column format:
+
+```csv
+filename,path,lat,lon,gps_accuracy_m
+IMG_7146.HEIC,data/raw_photos/UnderBuilding26/IMG_7146.HEIC,31.2620788,34.8023207,7.0
+```
+
+The `normalize_coords.py` script only reads `path`, `lat`, `lon` columns - other fields are optional metadata.
+
+### Why This Matters
+
+1. **Incremental Updates:** When adding new photos, only extract metadata from new folders - existing corrections are preserved.
+
+2. **Automatic Corrections:** Running `normalize_coords.py` always applies all `corrections_batch*.csv` files, so regenerating `dataset.csv` never loses fixes.
+
+3. **Audit Trail:** Each correction batch is a separate file (`corrections_batch1.csv`, `corrections_batch2.csv`, etc.) documenting when and what was fixed.
