@@ -1,7 +1,8 @@
 import os
 import math
+import argparse
 from pathlib import Path
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, List
 
 import pandas as pd
 from PIL import Image, ExifTags
@@ -103,7 +104,56 @@ def extract_lat_lon(img_path: Path) -> Tuple[Optional[float], Optional[float], O
         return None, None, None, None
 
 
-def main():
+def process_folder(folder_path: Path, output_dir: Path, project_root: Path) -> None:
+    """Process a single folder and extract metadata to CSV."""
+    print(f"\nProcessing: {folder_path.name}")
+    out_csv = output_dir / f"{folder_path.name}.csv"
+    
+    rows = []
+    exts = {".jpg", ".jpeg", ".png", ".heic", ".JPG", ".JPEG", ".HEIC"}
+
+    for p in sorted(folder_path.rglob("*")):
+        if p.suffix not in exts:
+            continue
+        
+        lat, lon, accuracy, dt = extract_lat_lon(p)
+        
+        # Fallback for missing accuracy (common in some metadata)
+        if lat is not None and accuracy is None:
+            accuracy = 65.0  # Default high uncertainty (meters)
+
+        rows.append({
+            "filename": p.name,
+            "path": str(p.relative_to(project_root)),  # Clean relative path
+            "datetime": dt,
+            "lat": lat,
+            "lon": lon,
+            "gps_accuracy_m": accuracy,
+        })
+
+    if not rows:
+        print(f"  No images found.")
+        return
+
+    # Save to CSV
+    df = pd.DataFrame(rows)
+    df.to_csv(out_csv, index=False)
+    
+    valid_gps = df['lat'].notnull().sum()
+    print(f"  Saved {out_csv.name} | Images: {len(df)} | Valid GPS: {valid_gps}")
+
+
+def main(folders: Optional[List[str]] = None):
+    """
+    Extract GPS metadata from raw photos.
+    
+    Args:
+        folders: Optional list of folder names to process. If None, process all folders.
+    
+    Usage:
+        python extract_metadata.py                              # All folders
+        python extract_metadata.py --folders Building26Night LibraryNight  # Only these
+    """
     # Robustly find paths relative to this script
     script_dir = Path(__file__).resolve().parent
     # Go up two levels: src/data_prep -> src -> ProjectRoot
@@ -118,48 +168,48 @@ def main():
     if not output_dir.exists():
         os.makedirs(output_dir)
 
-    print(f"Scanning all folders in {photos_root}...")
+    # Determine which folders to process
+    if folders:
+        # Only process specified folders
+        folder_paths = []
+        for folder_name in folders:
+            folder_path = photos_root / folder_name
+            if folder_path.exists() and folder_path.is_dir():
+                folder_paths.append(folder_path)
+            else:
+                print(f"Warning: Folder not found: {folder_name}")
+        
+        if not folder_paths:
+            print("No valid folders to process.")
+            return
+            
+        print(f"Processing {len(folder_paths)} specified folder(s)...")
+    else:
+        # Process all folders (default behavior)
+        folder_paths = [f for f in photos_root.iterdir() 
+                       if f.is_dir() and not f.name.startswith('.')]
+        print(f"Scanning all {len(folder_paths)} folders in {photos_root}...")
     
-    # Process each subfolder in Photos/
-    for folder_path in photos_root.iterdir():
-        if not folder_path.is_dir() or folder_path.name.startswith('.'):
-            continue
+    # Process each folder
+    for folder_path in folder_paths:
+        process_folder(folder_path, output_dir, project_root)
+    
+    print("\nDone!")
 
-        print(f"\nProcessing: {folder_path.name}")
-        out_csv = output_dir / f"{folder_path.name}.csv"
-        
-        rows = []
-        exts = {".jpg", ".jpeg", ".png", ".heic", ".JPG", ".JPEG", ".HEIC"}
-
-        for p in sorted(folder_path.rglob("*")):
-            if p.suffix not in exts:
-                continue
-            
-            lat, lon, accuracy, dt = extract_lat_lon(p)
-            
-            # Fallback for missing accuracy (common in some metadata)
-            if lat is not None and accuracy is None:
-                accuracy = 65.0  # Default high uncertainty (meters)
-
-            rows.append({
-                "filename": p.name,
-                "path": str(p.relative_to(project_root)), # Clean relative path
-                "datetime": dt,
-                "lat": lat,
-                "lon": lon,
-                "gps_accuracy_m": accuracy,
-            })
-
-        if not rows:
-            print(f"  No images found.")
-            continue
-
-        # Save to CSV
-        df = pd.DataFrame(rows)
-        df.to_csv(out_csv, index=False)
-        
-        valid_gps = df['lat'].notnull().sum()
-        print(f"  Saved {out_csv.name} | Images: {len(df)} | Valid GPS: {valid_gps}")
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(
+        description="Extract GPS metadata from raw photos.",
+        epilog="Examples:\n"
+               "  python extract_metadata.py                    # All folders\n"
+               "  python extract_metadata.py --folders Night26  # Only Night26 folder",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument(
+        "--folders", "-f",
+        nargs="+",
+        help="Specific folder names to process (default: all folders)"
+    )
+    
+    args = parser.parse_args()
+    main(folders=args.folders)
