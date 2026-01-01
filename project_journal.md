@@ -958,3 +958,68 @@ These represent the inherent limits of the dataset/model rather than fixable bli
 - Test Median: 9.90m
 - 97.7% within 30m
 - Only 0.3% catastrophic failures (>50m)
+
+---
+
+## Analysis: Error Patterns & Future Improvements
+
+### Error Distribution Analysis
+
+Analyzed 131 samples with >20m prediction error (11.4% of test set):
+
+**Geographic Clustering:**
+- High errors cluster along Y≈0 (campus center axis)
+- Top error zones: (-20m, 0m), (0m, 0m), (-60m, 0m), (+40m, 0m)
+- These areas likely have visually similar/ambiguous features
+
+**Prediction Bias:**
+- X bias: -2.9m, Y bias: +6.3m (minimal systematic bias)
+- Model isn't consistently predicting wrong direction
+
+### Ideas for Further Improvement
+
+#### 1. Higher Resolution Input (Currently 256x256)
+| Resolution | Potential Benefit | Risk |
+|------------|------------------|------|
+| **320x320** | More fine details visible | Slight training slowdown |
+| 384x384 | Maximum detail | Overfitting risk with current data size |
+
+Recommendation: Try 320x320 as a balanced improvement.
+
+#### 2. Another Round of Problematic Photos Extraction
+- Currently 11.4% of samples have >20m error
+- Could extract these and add to training (same technique as before)
+- Would require reprocessing images and retraining
+
+#### 3. Label Smoothing / Uncertainty Training
+Add noise during training proportional to expected uncertainty:
+```python
+noisy_target = target + noise_scale * torch.randn_like(target)
+```
+This teaches the model that exact coordinates have inherent uncertainty.
+
+#### 4. Focal Loss / Hard Example Mining
+Weight training more heavily on difficult samples:
+```python
+sample_weight = 1 + previous_error * scale_factor
+```
+Forces model to focus on hard cases rather than easy ones.
+
+#### 5. Test-Time Augmentation (TTA)
+During inference, apply multiple augmentations and average predictions:
+- Flip horizontally
+- Small rotations
+- Slight crops
+Could reduce variance without retraining.
+
+#### 6. Attention Mechanisms
+Add attention to the MLP head to help model focus on distinctive features:
+- Self-attention on CNN features
+- Could help distinguish similar-looking locations
+
+### Priority Order
+1. **Problematic photos extraction** (proven technique)
+2. **Higher resolution (320x320)** (low risk, potential gain)
+3. **TTA** (no retraining needed)
+4. **Focal loss** (training tweak)
+5. **Attention** (architecture change, higher risk)
