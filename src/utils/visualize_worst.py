@@ -35,30 +35,34 @@ def latlon_to_web_mercator(lat, lon):
     y = np.log(np.tan(np.pi/4 + np.radians(lat)/2)) * r
     return x, y
 
-def visualize_worst_samples(num_worst=25):
+def visualize_worst_samples(num_worst=25, experiment_name="b0_256_v2", use_night=False):
     # 1. Setup
-    csv_file = os.path.join(project_root, 'data', 'dataset.csv')
+    if use_night:
+        csv_file = os.path.join(project_root, 'data', 'night_holdout.csv')
+        output_plot = os.path.join(project_root, 'outputs', f'worst_night_{experiment_name}.png')
+    else:
+        csv_file = os.path.join(project_root, 'data', 'test_dataset.csv')
+        output_plot = os.path.join(project_root, 'outputs', f'worst_test_{experiment_name}.png')
+    
     img_dir = os.path.join(project_root, 'data', 'processed_images_256')
-    model_path = os.path.join(project_root, 'checkpoints', 'best_b0_256_mlp.pth')
-    indices_path = os.path.join(project_root, 'outputs', 'test_indices.npy')
-    output_plot = os.path.join(project_root, 'outputs', 'worst_samples_visualization.png')
+    checkpoint_filename = f'best_{experiment_name}.pth' if experiment_name != "default" else 'best_campus_locator.pth'
+    model_path = os.path.join(project_root, 'checkpoints', checkpoint_filename)
     
     if not os.path.exists(model_path):
-        print("Model not found.")
+        print(f"Model not found: {model_path}")
         return
-    if not os.path.exists(indices_path):
-        print("Test indices not found.")
+    if not os.path.exists(csv_file):
+        print(f"Dataset not found: {csv_file}")
         return
 
-    # Load Reference Point
-    df_temp = pd.read_csv(csv_file)
+    # Load Reference Point from training data
+    train_csv = os.path.join(project_root, 'data', 'dataset.csv')
+    df_temp = pd.read_csv(train_csv)
     ref_lat = df_temp['lat'].mean()
     ref_lon = df_temp['lon'].mean()
 
-    # 2. Load Data
-    full_dataset = CampusDataset(csv_file=csv_file, root_dir=img_dir)
-    test_indices = np.load(indices_path)
-    test_dataset = Subset(full_dataset, test_indices)
+    # 2. Load Data - directly from test/night CSV
+    test_dataset = CampusDataset(csv_file=csv_file, root_dir=img_dir, is_train=False)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
     
     # 3. Run Inference on ALL Test Data
@@ -75,26 +79,19 @@ def visualize_worst_samples(num_worst=25):
     
     all_preds = []
     all_labels = []
-    all_indices = []
     
-    print("Running inference on test set...")
-    current_idx = 0
+    dataset_name = "night holdout" if use_night else "test set"
+    print(f"Running inference on {dataset_name} ({len(test_dataset)} samples)...")
     with torch.no_grad():
         for inputs, labels, weights in test_loader:
             inputs = inputs.to(device)
             outputs = model(inputs)
             
-            batch_size = inputs.size(0)
-            batch_indices = test_indices[current_idx : current_idx + batch_size]
-            current_idx += batch_size
-            
             all_preds.append(outputs.cpu().numpy())
             all_labels.append(labels.numpy())
-            all_indices.extend(batch_indices)
             
     all_preds = np.vstack(all_preds)
     all_labels = np.vstack(all_labels)
-    all_indices = np.array(all_indices)
     
     # Calculate Errors
     errors = np.linalg.norm(all_preds - all_labels, axis=1)
@@ -122,14 +119,13 @@ def visualize_worst_samples(num_worst=25):
         col = i % cols
         
         # Data
-        idx_global = all_indices[idx_local]
         pred_local = all_preds[idx_local]
         true_local = all_labels[idx_local]
         error_m = errors[idx_local]
         
-        # Get filename and source
-        img_name = full_dataset.data_frame.iloc[idx_global]['filename']
-        source_file = full_dataset.data_frame.iloc[idx_global].get('source_file', 'Unknown')
+        # Get filename and source from test_dataset
+        img_name = test_dataset.data_frame.iloc[idx_local]['filename']
+        source_file = test_dataset.data_frame.iloc[idx_local].get('source_file', 'Unknown')
         img_path = os.path.join(img_dir, img_name)
         
         # Print to console
@@ -185,12 +181,19 @@ def visualize_worst_samples(num_worst=25):
         if i == 0:
             ax_map.legend(loc='upper right', fontsize='x-small')
 
-    plt.suptitle(f"WORST {num_worst} PREDICTIONS\nMean Error: {errors.mean():.1f}m | Median: {np.median(errors):.1f}m", 
+    title_prefix = "NIGHT HOLDOUT" if use_night else "TEST SET"
+    plt.suptitle(f"{title_prefix} - WORST {num_worst} PREDICTIONS\nMean Error: {errors.mean():.1f}m | Median: {np.median(errors):.1f}m", 
                  fontsize=16, fontweight='bold', y=1.01)
     plt.tight_layout()
     plt.savefig(output_plot, dpi=150, bbox_inches='tight')
     print(f"\nSaved visualization to {output_plot}")
 
 if __name__ == "__main__":
-    visualize_worst_samples(25)
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--experiment', default='b0_256_v2', help='Experiment name')
+    parser.add_argument('--night', action='store_true', help='Evaluate on night holdout')
+    parser.add_argument('--num', type=int, default=25, help='Number of worst samples')
+    args = parser.parse_args()
+    visualize_worst_samples(num_worst=args.num, experiment_name=args.experiment, use_night=args.night)
 

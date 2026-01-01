@@ -804,3 +804,87 @@ python src/training/evaluate.py v2
 # Evaluate on night holdout
 python src/utils/evaluate_night.py v2
 ```
+
+---
+
+## Jan 1, 2026 (Evening) - Training Results & Problematic Photos Extraction
+
+### Training Run: b0_256_v2 (114 epochs total)
+
+Trained EfficientNet-B0 with the new external test set structure:
+- **85 epochs** initial run
+- **+15 epochs** resume (to epoch 99)
+- **+15 epochs** resume (to epoch 114)
+
+**Validation Loss Progression:**
+- Epoch 1: 46.17 → Epoch 85: 6.50 → Epoch 99: 5.94 → Epoch 114: 5.82
+
+Model kept improving throughout - no overfitting detected.
+
+### Evaluation Results
+
+**Test Set (1,321 samples from TestPhotos):**
+| Metric | Value |
+|--------|-------|
+| Mean Error | 17.48 m |
+| Median Error | 13.37 m |
+
+**Night Holdout (54 samples):**
+| Metric | Value |
+|--------|-------|
+| Mean Error | 10.58 m |
+| Median Error | 8.07 m |
+| Under 10m | 55.6% |
+| Under 20m | 85.2% |
+
+**Key Insight:** Night holdout performs BETTER than general test set! Night augmentations are working effectively.
+
+### Error Distribution Analysis
+
+| Error Range | Count | % |
+|-------------|-------|---|
+| Under 10m | 460 | 34.8% |
+| Under 20m | 940 | 71.2% |
+| Under 30m | 1,154 | 87.4% |
+| **Over 30m** | 167 | 12.6% |
+| Over 50m | 40 | 3.0% |
+| Over 100m | 9 | 0.7% |
+
+### Problematic Photos Extraction
+
+The 167 photos with >30m error were "blind spots" - areas/views not well-represented in training. Decision: **Move them to training data.**
+
+**Created:** `src/data_prep/extract_problematic.py`
+- Identifies test photos with error > threshold
+- Renames files: `TestPhotos_*.jpg` → `ProblematicPhotos_*.jpg`
+- Moves raw photos to new folder
+- Creates properly formatted metadata CSV
+- Updates dataset.csv (training) and test_dataset.csv
+
+**Results:**
+| Dataset | Before | After |
+|---------|--------|-------|
+| Training Pool | 1,950 | 2,117 samples (+167) |
+| Test Set | 1,321 | 1,154 samples (-167) |
+
+### New Folder Structure
+
+```
+data/
+├── raw_photos/
+│   ├── ProblematicPhotos/     ← NEW (167 HEIC files)
+│   ├── TestPhotos/            ← (1,154 remaining)
+│   └── ...
+├── metadata_raw/
+│   ├── ProblematicPhotos.csv  ← NEW
+│   └── ...
+└── processed_images_256/
+    ├── ProblematicPhotos_*.jpg  ← (167 renamed)
+    └── TestPhotos_*.jpg         ← (1,154 remaining)
+```
+
+### Next Steps
+
+1. **Retrain with expanded dataset** - The model should now learn the "blind spots"
+2. **Evaluate on cleaner test set** - 1,154 samples without the extreme outliers
+3. **Consider ensemble** - Train multiple models with different seeds
