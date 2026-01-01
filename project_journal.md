@@ -732,3 +732,75 @@ After visual inspection of 100+ augmented samples, we tuned the augmentation pip
 | Night probability | 25% | **20%** | Slightly less frequent |
 
 **Key insight:** The original night simulation (10-40% brightness) produced nearly black images where the model couldn't learn anything. The new settings (40-70% brightness) create challenging but learnable low-light conditions.
+
+### Geometric Augmentations Refined
+
+After careful consideration of what augmentations are valid for GPS regression:
+
+| Augmentation | Status | Reasoning |
+|--------------|--------|-----------|
+| `RandomRotation(±5°)` | **Added** | TA mentions "some variation in angle may occur" in test images |
+| `RandomPerspective(0.2)` | **Kept (reduced)** | Simulates phone tilt (same location, different angle). Reduced from 0.3 to 0.2 for gentler effect |
+| `RandomHorizontalFlip` | **Removed** | Invalid - flipping image doesn't flip GPS X coordinate |
+| `RandomResizedCrop` | **Not used** | Could crop out distinctive landmarks |
+
+---
+
+**Date:** Jan 1, 2026
+
+## Test Set Restructure
+
+### Problem with Previous Approach
+The old 80/10/10 split meant the test set came from the same photo sessions as training data. This could lead to overly optimistic results if similar photos ended up in both sets.
+
+### New Approach: External Test Set
+We collected a dedicated **TestPhotos** folder (1,322 images) from a separate photo session covering the entire campus. This is a true held-out test set that the model has never seen during training.
+
+### Data Split Summary
+
+| Dataset | Count | Purpose |
+|---------|-------|---------|
+| **Training pool** | 1,950 | 85/15 train/val split |
+| **Test set** | 1,321 | External evaluation (TestPhotos) |
+| **Night holdout** | 54 | Night-specific evaluation (10% of night photos) |
+
+### Files Created
+
+| File | Description |
+|------|-------------|
+| `data/dataset.csv` | Training data only (excludes test and night holdout) |
+| `data/test_dataset.csv` | External test set from TestPhotos |
+| `data/night_holdout.csv` | 10% of night photos for separate evaluation |
+
+### Code Changes
+
+**`normalize_coords.py`**: Now creates three CSV files:
+- Identifies TestPhotos by `source_file == 'TestPhotos.csv'`
+- Randomly selects 10% of night photos for holdout (seed=42)
+- Remaining data goes to training pool
+
+**`train.py`**: Simplified to 85/15 train/val split:
+- No more test split (external test set used instead)
+- Stratified by location (source_file)
+- Removed `test_indices.npy` saving
+
+**`evaluate.py`**: Loads `test_dataset.csv` directly:
+- No longer uses indices from training
+- Evaluates on completely external data
+
+**`evaluate_night.py`** (NEW): Separate night evaluation:
+- Loads `night_holdout.csv`
+- Reports night-specific metrics (mean, median, distribution)
+
+### Usage
+
+```bash
+# Train with 85/15 split
+python -c "from src.training.train import train_model; train_model(num_epochs=75, experiment_name='v2')"
+
+# Evaluate on external test set
+python src/training/evaluate.py v2
+
+# Evaluate on night holdout
+python src/utils/evaluate_night.py v2
+```
