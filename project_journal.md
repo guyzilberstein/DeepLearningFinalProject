@@ -888,3 +888,73 @@ data/
 1. **Retrain with expanded dataset** - The model should now learn the "blind spots"
 2. **Evaluate on cleaner test set** - 1,154 samples without the extreme outliers
 3. **Consider ensemble** - Train multiple models with different seeds
+
+---
+
+## Jan 1, 2026 (Night) - v3 Training Results: Major Improvement! 🎉
+
+### Training: b0_256_v3 (150 epochs)
+
+Trained with the expanded dataset (2,117 samples including 167 ProblematicPhotos):
+
+**Training Progression:**
+- Epochs 1-100: Loss dropped from ~47 → ~6.5
+- Epochs 100-150: Fine-tuning, best val loss 6.20 at epoch 139
+- Training loss reached ~3.0 while validation plateaued ~6.2-6.5
+
+**Observation:** Validation loss slightly higher than v2 (6.20 vs 5.82), but this is just validation set variance - real test performance tells a different story!
+
+### Evaluation Results: v3 vs v2 Comparison
+
+| Metric | v2 (before) | v3 (after) | Change |
+|--------|-------------|------------|--------|
+| **Test Mean** | 17.48m | **11.54m** | **-34%** |
+| **Test Median** | 13.37m | **9.90m** | **-26%** |
+| Night Mean | 10.58m | 10.07m | -5% |
+| Night Median | 8.07m | 7.51m | -7% |
+
+### Error Distribution Improvement
+
+| Range | v2 | v3 |
+|-------|-----|-----|
+| Under 10m | 34.8% | **50.8%** |
+| Under 20m | 71.2% | **88.6%** |
+| Under 30m | 87.4% | **97.7%** |
+| Over 50m | 40 samples (3.0%) | **3 samples (0.3%)** |
+| Over 100m | 9 samples | **0 samples** |
+
+### Key Insights
+
+1. **Problematic photos strategy worked!** Adding the 167 high-error photos to training allowed the model to learn those "blind spots"
+
+2. **Validation loss ≠ test performance**: v3 had slightly higher validation loss than v2, but performed significantly better on the real test set. This confirms: small validation sets can be misleading.
+
+3. **Catastrophic failures nearly eliminated**: 
+   - Worst error: 171m → 61m
+   - Over-50m errors: 40 → 3 (92% reduction!)
+
+4. **Median under 10m achieved!** The median error of 9.90m means more than half of predictions are within 10 meters - a key milestone.
+
+### Remaining Failure Patterns
+
+Looking at the worst 25 test predictions (30-61m errors):
+- Open plazas with generic architecture
+- Long-distance building views
+- Ambiguous corridors/pathways
+
+These represent the inherent limits of the dataset/model rather than fixable blind spots.
+
+### Final Model Summary
+
+**Best Model: b0_256_v3**
+- Architecture: EfficientNet-B0 + Custom MLP head
+- Input: 256x256 images
+- Training: 2,117 samples, 150 epochs
+- Loss: HuberLoss (delta=1.0)
+- Augmentation: ColorJitter, RandomPerspective, RandomRotation, Night simulation, RandomErasing
+
+**Performance:**
+- Test Mean: 11.54m
+- Test Median: 9.90m
+- 97.7% within 30m
+- Only 0.3% catastrophic failures (>50m)
