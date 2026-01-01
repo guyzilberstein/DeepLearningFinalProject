@@ -121,14 +121,12 @@ def apply_corrections(df: pd.DataFrame, corrections_dir: str, ref_lat: float, re
 
 def normalize_and_save(project_root: str = None):
     """
-    Main function to normalize coordinates and generate dataset.csv.
+    Main function to normalize coordinates and generate dataset files.
     
-    1. Loads all metadata from metadata_raw/
-    2. Calculates reference point (center of campus)
-    3. Converts lat/lon to local x/y meters
-    4. Applies all corrections from corrections_batch*.csv
-    5. Recalculates Z-scores
-    6. Saves to dataset.csv
+    Creates three output files:
+    - dataset.csv: Training data (excludes TestPhotos and night holdout)
+    - test_dataset.csv: TestPhotos only (external test set)
+    - night_holdout.csv: 10% of night photos (for night-specific evaluation)
     """
     if project_root is None:
         script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -137,12 +135,14 @@ def normalize_and_save(project_root: str = None):
     metadata_dir = os.path.join(project_root, 'data', 'metadata_raw')
     data_dir = os.path.join(project_root, 'data')
     output_file = os.path.join(data_dir, 'dataset.csv')
+    test_output_file = os.path.join(data_dir, 'test_dataset.csv')
+    night_holdout_file = os.path.join(data_dir, 'night_holdout.csv')
     ref_file = os.path.join(data_dir, 'reference_coords.json')
     
     # 1. Load metadata
     df = load_metadata(metadata_dir)
     
-    # 2. Calculate reference point (center of campus)
+    # 2. Calculate reference point (center of campus) - using ALL data for consistent coordinates
     ref_lat = df['lat'].mean()
     ref_lon = df['lon'].mean()
     print(f"\nReference Point (Mean): Lat={ref_lat:.6f}, Lon={ref_lon:.6f}")
@@ -164,15 +164,48 @@ def normalize_and_save(project_root: str = None):
     # 5. Apply corrections
     df = apply_corrections(df, data_dir, ref_lat, ref_lon, METERS_PER_LAT, METERS_PER_LON)
     
-    # 6. Save dataset
-    cols_to_keep = ['filename', 'path', 'lat', 'lon', 'x_meters', 'y_meters', 
+    # 6. Split into test set, night holdout, and training data
+    print("\n--- Splitting Data ---")
+    
+    # TestPhotos = external test set
+    is_test = df['source_file'] == 'TestPhotos.csv'
+    test_df = df[is_test].copy()
+    print(f"Test set (TestPhotos): {len(test_df)} samples")
+    
+    # Night photos for holdout (10%)
+    night_sources = ['NightImagesLibraryArea.csv', 'nightWithout26AndLibrary.csv']
+    is_night = df['source_file'].isin(night_sources)
+    night_df = df[is_night & ~is_test].copy()
+    
+    # Randomly select 10% of night photos for holdout
+    night_holdout_df = night_df.sample(frac=0.1, random_state=42)
+    night_holdout_indices = night_holdout_df.index
+    print(f"Night holdout (10%): {len(night_holdout_df)} samples (from {len(night_df)} night photos)")
+    
+    # Training data = everything except TestPhotos and night holdout
+    train_df = df[~is_test & ~df.index.isin(night_holdout_indices)].copy()
+    print(f"Training pool: {len(train_df)} samples")
+    
+    # 7. Save all datasets
+    cols_to_keep = ['filename', 'lat', 'lon', 'x_meters', 'y_meters', 
                     'gps_accuracy_m', 'source_file']
     cols_to_keep = [c for c in cols_to_keep if c in df.columns]
     
-    df[cols_to_keep].to_csv(output_file, index=False)
-    print(f"\nPreprocessing complete. Data saved to {output_file}")
-    print(f"Total samples: {len(df)}")
-    print(df[['filename', 'lat', 'lon', 'x_meters', 'y_meters']].head())
+    train_df[cols_to_keep].to_csv(output_file, index=False)
+    print(f"\nSaved training data to {output_file} ({len(train_df)} samples)")
+    
+    test_df[cols_to_keep].to_csv(test_output_file, index=False)
+    print(f"Saved test data to {test_output_file} ({len(test_df)} samples)")
+    
+    night_holdout_df[cols_to_keep].to_csv(night_holdout_file, index=False)
+    print(f"Saved night holdout to {night_holdout_file} ({len(night_holdout_df)} samples)")
+    
+    # Summary
+    print("\n--- Summary ---")
+    print(f"Training pool: {len(train_df)} (will be split 85/15 train/val)")
+    print(f"Test set: {len(test_df)}")
+    print(f"Night holdout: {len(night_holdout_df)}")
+    print(f"Total: {len(train_df) + len(test_df) + len(night_holdout_df)}")
 
 
 if __name__ == "__main__":

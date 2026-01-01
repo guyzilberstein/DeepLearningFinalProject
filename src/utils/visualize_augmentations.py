@@ -27,12 +27,17 @@ augmentation_transforms = transforms.Compose([
     transforms.RandomErasing(p=0.2, scale=(0.02, 0.15)),
 ])
 
-# EXPERIMENTAL: Less aggressive night, more color variety
+# CURRENT: Rotation + gentle perspective, color variety
 experimental_transforms = transforms.Compose([
     transforms.Resize((INPUT_SIZE, INPUT_SIZE)),
-    transforms.RandomPerspective(distortion_scale=0.3, p=0.5),
     
-    # More color variety but reduced saturation (0.3 instead of 0.4)
+    # Slight rotation (±5°) for angle variation
+    transforms.RandomRotation(degrees=5),
+    
+    # Gentle perspective (0.2 instead of 0.3) - simulates phone tilt
+    transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
+    
+    # Color variety (brightness, contrast, saturation, hue for time-of-day)
     transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
     
     # Gentler night simulation: 0.4-0.7 brightness (40-70% of original)

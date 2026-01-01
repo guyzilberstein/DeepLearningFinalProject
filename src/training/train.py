@@ -112,49 +112,27 @@ def train_model(num_epochs=25, batch_size=None, learning_rate=0.0001, experiment
     # We use 'source_file' column for stratification to ensure all locations are represented
     stratify_labels = df['source_file'].values
     
-    # First split: Separate Test (10%) from the rest (90%)
-    # Stratify by location (source_file)
+    # 85/15 Train/Val split (Test set is now external in test_dataset.csv)
     from sklearn.model_selection import train_test_split
     
-    train_val_idx, test_idx = train_test_split(
-        indices, 
-        test_size=0.10, 
-        stratify=stratify_labels, 
-        random_state=42
-    )
-    
-    # Get labels for the remaining train_val set for the next split
-    train_val_labels = stratify_labels[train_val_idx]
-    
-    # Second split: Separate Validation (10% of total) from the remaining 90%
-    # The remaining 80% of total becomes the Training set.
-    # Val share of remaining = 0.10 / 0.90 = ~0.1111
-    val_share_of_remaining = 0.10 / 0.90
-    
     train_idx, val_idx = train_test_split(
-        train_val_idx, 
-        test_size=val_share_of_remaining, 
-        stratify=train_val_labels, 
-        random_state=42
+        indices, 
+        test_size=0.15, 
+        stratify=stratify_labels, 
+        random_state=seed
     )
     
     # Create Subsets
     train_dataset = Subset(full_dataset_train, train_idx)
     val_dataset = Subset(full_dataset_val, val_idx)
-    test_dataset = Subset(full_dataset_val, test_idx)
     
-    # Verify split distribution in Test set (Optional, for logging)
-    print("\nTest Set Distribution by Location:")
-    test_df = df.iloc[test_idx]
-    print(test_df['source_file'].value_counts())
+    # Verify split distribution
+    print("\nValidation Set Distribution by Location:")
+    val_df = df.iloc[val_idx]
+    print(val_df['source_file'].value_counts())
     print("-" * 30)
     
-    # Save the test indices so evaluate.py knows which images are in the test set
-    test_indices = test_idx
-    np.save(os.path.join(output_dir, 'test_indices.npy'), test_indices)
-    print(f"Saved {len(test_indices)} test indices to outputs/test_indices.npy")
-    
-    print(f"Dataset Split: {len(train_dataset)} Train, {len(val_dataset)} Val, {len(test_dataset)} Test")
+    print(f"Dataset Split: {len(train_dataset)} Train, {len(val_dataset)} Val")
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, 
                               num_workers=num_workers, pin_memory=pin_memory)

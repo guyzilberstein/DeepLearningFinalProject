@@ -1,5 +1,8 @@
+"""
+Evaluate model specifically on night holdout set.
+This tests the model's performance on low-light conditions.
+"""
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
 import numpy as np
 import os
@@ -14,14 +17,15 @@ if project_root not in sys.path:
 from src.model.dataset import CampusDataset
 from src.model.network import CampusLocator
 
-def evaluate_model(experiment_name="default"):
+
+def evaluate_night(experiment_name="default"):
     """
-    Evaluate the model on the external test set (test_dataset.csv).
+    Evaluate the model on the night holdout set (night_holdout.csv).
     Args:
         experiment_name: Name of the experiment to evaluate (matches checkpoint name)
     """
-    # 1. Setup - Use test_dataset.csv (external test set)
-    test_csv = os.path.join(project_root, 'data', 'test_dataset.csv')
+    # 1. Setup - Use night_holdout.csv
+    night_csv = os.path.join(project_root, 'data', 'night_holdout.csv')
     img_dir = os.path.join(project_root, 'data', 'processed_images_256')
     
     # Checkpoint path based on experiment name
@@ -31,16 +35,16 @@ def evaluate_model(experiment_name="default"):
     if not os.path.exists(model_path):
         print(f"Model file {model_path} not found. Run train.py first.")
         return
-    if not os.path.exists(test_csv):
-        print(f"Test dataset {test_csv} not found. Run normalize_coords.py first.")
+    if not os.path.exists(night_csv):
+        print(f"Night holdout {night_csv} not found. Run normalize_coords.py first.")
         return
 
-    # 2. Load Test Data directly from test_dataset.csv
-    test_dataset = CampusDataset(csv_file=test_csv, root_dir=img_dir, is_train=False)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    # 2. Load Night Holdout Data
+    night_dataset = CampusDataset(csv_file=night_csv, root_dir=img_dir, is_train=False)
+    night_loader = DataLoader(night_dataset, batch_size=32, shuffle=False)
     
-    print(f"=== Evaluating Experiment: {experiment_name} ===")
-    print(f"Evaluating on {len(test_dataset)} test samples (from test_dataset.csv)")
+    print(f"=== Night Holdout Evaluation: {experiment_name} ===")
+    print(f"Evaluating on {len(night_dataset)} night samples (from night_holdout.csv)")
     
     # 3. Load Model
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -48,15 +52,11 @@ def evaluate_model(experiment_name="default"):
     
     model = CampusLocator().to(device)
     
-    # Handle both old format (state_dict only) and new format (dict with model_state_dict)
     checkpoint = torch.load(model_path, map_location=device)
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
         print(f"Loaded model with best_loss: {checkpoint.get('best_loss', 'N/A')}")
-        if 'experiment' in checkpoint:
-            print(f"Experiment name in checkpoint: {checkpoint['experiment']}")
     else:
-        # Old format: checkpoint IS the state_dict
         model.load_state_dict(checkpoint)
     model.eval()
     
@@ -65,7 +65,7 @@ def evaluate_model(experiment_name="default"):
     errors = []
     
     with torch.no_grad():
-        for inputs, labels, _ in test_loader:
+        for inputs, labels, _ in night_loader:
             inputs = inputs.to(device)
             labels = labels.to(device)
             
@@ -78,19 +78,33 @@ def evaluate_model(experiment_name="default"):
             total_error += batch_errors.sum().item()
             errors.extend(batch_errors.cpu().numpy())
             
-    mean_error = total_error / len(test_dataset)
+    mean_error = total_error / len(night_dataset)
     median_error = np.median(errors)
+    max_error = np.max(errors)
+    min_error = np.min(errors)
     
-    print("-" * 30)
-    print(f"Test Set Mean Error:   {mean_error:.2f} meters")
-    print(f"Test Set Median Error: {median_error:.2f} meters")
-    print("-" * 30)
+    print("-" * 40)
+    print(f"Night Holdout Mean Error:   {mean_error:.2f} meters")
+    print(f"Night Holdout Median Error: {median_error:.2f} meters")
+    print(f"Night Holdout Min Error:    {min_error:.2f} meters")
+    print(f"Night Holdout Max Error:    {max_error:.2f} meters")
+    print("-" * 40)
+    
+    # Distribution analysis
+    under_10m = sum(1 for e in errors if e < 10)
+    under_20m = sum(1 for e in errors if e < 20)
+    over_30m = sum(1 for e in errors if e > 30)
+    
+    print(f"Under 10m: {under_10m}/{len(errors)} ({100*under_10m/len(errors):.1f}%)")
+    print(f"Under 20m: {under_20m}/{len(errors)} ({100*under_20m/len(errors):.1f}%)")
+    print(f"Over 30m:  {over_30m}/{len(errors)} ({100*over_30m/len(errors):.1f}%)")
     
     return mean_error, median_error
 
+
 if __name__ == "__main__":
-    # Check for command line argument
     if len(sys.argv) > 1:
-        evaluate_model(experiment_name=sys.argv[1])
+        evaluate_night(experiment_name=sys.argv[1])
     else:
-        evaluate_model()
+        evaluate_night()
+

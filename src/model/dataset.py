@@ -24,9 +24,11 @@ class CampusDataset(Dataset):
             self.transform = transforms.Compose([
                 transforms.Resize((INPUT_SIZE, INPUT_SIZE)),
                 
-                # Geometric Augmentation (Crucial for localization)
-                # Simulates viewing buildings from different angles/tilts
-                transforms.RandomPerspective(distortion_scale=0.3, p=0.5),
+                # Slight rotation (±5°) - TA mentions "some variation in angle may occur"
+                transforms.RandomRotation(degrees=5),
+                
+                # Gentle perspective (simulates phone tilt, not location change)
+                transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
                 
                 # Photometric Augmentation (Lighting & color invariance)
                 # Wider hue range (0.1) simulates different times of day
