@@ -699,3 +699,36 @@ The `normalize_coords.py` script only reads `path`, `lat`, `lon` columns - other
 2. **Automatic Corrections:** Running `normalize_coords.py` always applies all `corrections_batch*.csv` files, so regenerating `dataset.csv` never loses fixes.
 
 3. **Audit Trail:** Each correction batch is a separate file (`corrections_batch1.csv`, `corrections_batch2.csv`, etc.) documenting when and what was fixed.
+
+---
+
+## Augmentation Tuning
+
+### Visualization Tool
+
+Created `src/utils/visualize_augmentations.py` to preview augmentation effects before training:
+
+```bash
+# Show 10 images with 10 augmentations each
+python src/utils/visualize_augmentations.py --images 10 --augs 10
+
+# Test experimental settings
+python src/utils/visualize_augmentations.py --images 10 --augs 10 --experimental
+```
+
+Generates a grid comparing original images against augmented versions, saved to `outputs/augmentation_examples.png`.
+
+### Revised Augmentation Settings
+
+After visual inspection of 100+ augmented samples, we tuned the augmentation pipeline:
+
+| Parameter | Old Value | New Value | Reason |
+|-----------|-----------|-----------|--------|
+| ColorJitter brightness | 0.2 | **0.3** | More lighting variation |
+| ColorJitter saturation | 0.2 | **0.3** | Slightly more color range |
+| ColorJitter hue | 0.05 | **0.1** | Simulates different times of day (warm/cool) |
+| Night brightness | (0.1, 0.4) | **(0.4, 0.7)** | Old was too dark (nearly black) |
+| Night contrast | (0.1, 0.4) | **(0.6, 0.9)** | Preserve structure visibility |
+| Night probability | 25% | **20%** | Slightly less frequent |
+
+**Key insight:** The original night simulation (10-40% brightness) produced nearly black images where the model couldn't learn anything. The new settings (40-70% brightness) create challenging but learnable low-light conditions.
