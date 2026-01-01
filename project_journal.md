@@ -837,7 +837,7 @@ Model kept improving throughout - no overfitting detected.
 | Under 10m | 55.6% |
 | Under 20m | 85.2% |
 
-**Key Insight:** Night holdout performs BETTER than general test set! Night augmentations are working effectively.
+**Key Insight:** Night holdout has lower error, but this is likely due to sample size (54 vs 1,321) rather than better night performance. With fewer samples from a limited area, there are simply fewer opportunities to encounter blind spots. The test set's larger size and geographic diversity exposed more failure modes.
 
 ### Error Distribution Analysis
 
