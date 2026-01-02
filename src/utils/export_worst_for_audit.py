@@ -35,7 +35,7 @@ def export_for_maps(num_worst: int = 25, experiment_name: str = "b0_256_mlp"):
     """
     # Setup paths
     csv_file = os.path.join(project_root, 'data', 'dataset.csv')
-    img_dir = os.path.join(project_root, 'data', 'processed_images_256')
+    img_dir = os.path.join(project_root, 'data', 'processed_images_320')
     model_path = os.path.join(project_root, 'checkpoints', f'best_{experiment_name}.pth')
     indices_path = os.path.join(project_root, 'outputs', 'test_indices.npy')
     output_csv = os.path.join(project_root, 'outputs', 'worst_for_maps.csv')

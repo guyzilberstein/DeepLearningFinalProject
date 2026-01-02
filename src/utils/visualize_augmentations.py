@@ -69,7 +69,7 @@ def visualize_augmentations(num_images: int = 3, num_augmentations: int = 5, exp
         num_augmentations: Number of augmented versions per image
         experimental: Use experimental transforms (gentler night, more color)
     """
-    img_dir = os.path.join(project_root, 'data', 'processed_images_256')
+    img_dir = os.path.join(project_root, 'data', 'processed_images_320')
     
     if not os.path.exists(img_dir):
         print(f"Image directory not found: {img_dir}")

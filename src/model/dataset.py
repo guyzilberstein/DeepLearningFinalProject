@@ -5,8 +5,8 @@ import pandas as pd
 import torchvision.transforms as transforms
 import os
 
-# Input resolution for EfficientNet-B0 (close to native 224x224)
-INPUT_SIZE = 256
+# Input resolution for EfficientNet-B0 (higher res for fine details)
+INPUT_SIZE = 320
 
 class CampusDataset(Dataset):
     def __init__(self, csv_file, root_dir, is_train=False):

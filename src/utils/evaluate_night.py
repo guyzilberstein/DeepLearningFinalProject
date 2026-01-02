@@ -26,7 +26,7 @@ def evaluate_night(experiment_name="default"):
     """
     # 1. Setup - Use night_holdout.csv
     night_csv = os.path.join(project_root, 'data', 'night_holdout.csv')
-    img_dir = os.path.join(project_root, 'data', 'processed_images_256')
+    img_dir = os.path.join(project_root, 'data', 'processed_images_320')
     
     # Checkpoint path based on experiment name
     checkpoint_filename = f'best_{experiment_name}.pth' if experiment_name != "default" else 'best_campus_locator.pth'

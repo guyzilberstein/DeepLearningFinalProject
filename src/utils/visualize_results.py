@@ -38,7 +38,7 @@ def latlon_to_web_mercator(lat, lon):
 def visualize_test_samples():
     # 1. Setup
     csv_file = os.path.join(project_root, 'data', 'dataset.csv')
-    img_dir = os.path.join(project_root, 'data', 'processed_images_256')
+    img_dir = os.path.join(project_root, 'data', 'processed_images_320')
     model_path = os.path.join(project_root, 'checkpoints', 'best_b0_256_mlp.pth')
     indices_path = os.path.join(project_root, 'outputs', 'test_indices.npy')
     output_plot = os.path.join(project_root, 'outputs', 'test_samples_visualization.png')

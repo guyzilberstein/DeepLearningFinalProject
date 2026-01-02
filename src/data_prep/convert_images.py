@@ -71,8 +71,8 @@ if __name__ == "__main__":
     
     source_dir = os.path.join(project_root, "data", "raw_photos")
     
-    # Target size for EfficientNet-B0 (close to native 224x224)
-    TARGET_SIZE = 256
+    # Target size for EfficientNet-B0 (higher resolution for fine details)
+    TARGET_SIZE = 320
     dest_dir = os.path.join(project_root, "data", f"processed_images_{TARGET_SIZE}")
     
     print(f"Source: {source_dir}")

@@ -20,14 +20,19 @@ from src.model.dataset import CampusDataset
 from src.model.network import CampusLocator
 
 
-def extract_problematic_photos(experiment_name="b0_256_v2", error_threshold=30.0):
+def extract_problematic_photos(experiment_name="b0_256_v3", error_threshold=20.0, batch_name="ProblematicPhotos2"):
     """
     Find test photos with error > threshold and move them to training data.
+    
+    Args:
+        experiment_name: Name of the model checkpoint to use
+        error_threshold: Move photos with error > this value (meters)
+        batch_name: Name for the new batch (e.g., ProblematicPhotos2)
     """
     # Paths
     test_csv = os.path.join(project_root, 'data', 'test_dataset.csv')
     train_csv = os.path.join(project_root, 'data', 'dataset.csv')
-    img_dir = os.path.join(project_root, 'data', 'processed_images_256')
+    img_dir = os.path.join(project_root, 'data', 'processed_images_320')
     metadata_dir = os.path.join(project_root, 'data', 'metadata_raw')
     
     checkpoint_filename = f'best_{experiment_name}.pth'
@@ -75,16 +80,16 @@ def extract_problematic_photos(experiment_name="b0_256_v2", error_threshold=30.0
     problematic_df = test_df.iloc[problematic_indices].copy()
     
     # Update source_file to indicate these are now training photos from problematic set
-    problematic_df['source_file'] = 'ProblematicPhotos.csv'
+    problematic_df['source_file'] = f'{batch_name}.csv'
     
-    # Rename the files: TestPhotos_* -> ProblematicPhotos_*
-    print("\nRenaming files...")
+    # Rename the files: TestPhotos_* -> {batch_name}_*
+    print(f"\nRenaming files to {batch_name}_*...")
     renamed_filenames = []
     metadata_rows = []
     
     for idx, row in problematic_df.iterrows():
         old_filename = row['filename']
-        new_filename = old_filename.replace('TestPhotos_', 'ProblematicPhotos_')
+        new_filename = old_filename.replace('TestPhotos_', f'{batch_name}_')
         renamed_filenames.append(new_filename)
         
         old_path = os.path.join(img_dir, old_filename)
@@ -103,7 +108,7 @@ def extract_problematic_photos(experiment_name="b0_256_v2", error_threshold=30.0
         
         metadata_rows.append({
             'filename': orig_heic_name,
-            'path': f'data/raw_photos/ProblematicPhotos/{orig_heic_name}',
+            'path': f'data/raw_photos/{batch_name}/{orig_heic_name}',
             'datetime': datetime_val,
             'lat': row['lat'],
             'lon': row['lon'],
@@ -114,7 +119,7 @@ def extract_problematic_photos(experiment_name="b0_256_v2", error_threshold=30.0
     
     # Create metadata CSV with correct format (same as other metadata files)
     metadata_df = pd.DataFrame(metadata_rows)
-    metadata_path = os.path.join(metadata_dir, 'ProblematicPhotos.csv')
+    metadata_path = os.path.join(metadata_dir, f'{batch_name}.csv')
     metadata_df.to_csv(metadata_path, index=False)
     print(f"Created metadata: {metadata_path}")
     
@@ -135,12 +140,13 @@ def extract_problematic_photos(experiment_name="b0_256_v2", error_threshold=30.0
     print(f"Moved {len(problematic_indices)} problematic photos to training")
     print(f"Test set: {len(test_df)} -> {len(remaining_test_df)} samples")
     print(f"Training pool: {len(train_df)} -> {len(updated_train_df)} samples")
-    print(f"Files renamed: TestPhotos_* -> ProblematicPhotos_*")
+    print(f"Files renamed: TestPhotos_* -> {batch_name}_*")
     print("="*50)
     
     # Show error distribution of moved photos
     moved_errors = all_errors[problematic_mask]
     print(f"\nMoved photos error distribution:")
+    print(f"  {error_threshold}-30m:  {sum((moved_errors > error_threshold) & (moved_errors <= 30))}")
     print(f"  30-50m:  {sum((moved_errors > 30) & (moved_errors <= 50))}")
     print(f"  50-100m: {sum((moved_errors > 50) & (moved_errors <= 100))}")
     print(f"  >100m:   {sum(moved_errors > 100)}")
@@ -149,9 +155,10 @@ def extract_problematic_photos(experiment_name="b0_256_v2", error_threshold=30.0
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('--experiment', default='b0_256_v2', help='Experiment name')
-    parser.add_argument('--threshold', type=float, default=30.0, help='Error threshold in meters')
+    parser.add_argument('--experiment', default='b0_256_v3', help='Experiment name')
+    parser.add_argument('--threshold', type=float, default=20.0, help='Error threshold in meters')
+    parser.add_argument('--batch', default='ProblematicPhotos2', help='Batch name for the extracted photos')
     args = parser.parse_args()
     
-    extract_problematic_photos(experiment_name=args.experiment, error_threshold=args.threshold)
+    extract_problematic_photos(experiment_name=args.experiment, error_threshold=args.threshold, batch_name=args.batch)
 

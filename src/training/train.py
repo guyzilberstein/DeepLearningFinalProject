@@ -86,7 +86,7 @@ def train_model(num_epochs=25, batch_size=None, learning_rate=0.0001, experiment
     
     # 2. Setup Paths
     csv_file = os.path.join(project_root, 'data', 'dataset.csv')
-    img_dir = os.path.join(project_root, 'data', 'processed_images_256')
+    img_dir = os.path.join(project_root, 'data', 'processed_images_320')
     checkpoint_dir = os.path.join(project_root, 'checkpoints')
     output_dir = os.path.join(project_root, 'outputs')
     

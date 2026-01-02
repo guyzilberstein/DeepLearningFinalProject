@@ -126,7 +126,7 @@ def predict(image_path):
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python predict.py <image_path>")
-        print("Example: python predict.py data/processed_images_256/LibraryArea_IMG_7288.jpg")
+        print("Example: python predict.py data/processed_images_320/LibraryArea_IMG_7288.jpg")
         sys.exit(1)
     
     image_path = sys.argv[1]

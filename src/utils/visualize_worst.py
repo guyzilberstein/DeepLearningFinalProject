@@ -44,7 +44,7 @@ def visualize_worst_samples(num_worst=25, experiment_name="b0_256_v2", use_night
         csv_file = os.path.join(project_root, 'data', 'test_dataset.csv')
         output_plot = os.path.join(project_root, 'outputs', f'worst_test_{experiment_name}.png')
     
-    img_dir = os.path.join(project_root, 'data', 'processed_images_256')
+    img_dir = os.path.join(project_root, 'data', 'processed_images_320')
     checkpoint_filename = f'best_{experiment_name}.pth' if experiment_name != "default" else 'best_campus_locator.pth'
     model_path = os.path.join(project_root, 'checkpoints', checkpoint_filename)
     

@@ -48,7 +48,7 @@ def load_model(model_path, device):
 def visualize_ensemble():
     # Setup
     csv_file = os.path.join(project_root, 'data', 'dataset.csv')
-    img_dir = os.path.join(project_root, 'data', 'processed_images_256')
+    img_dir = os.path.join(project_root, 'data', 'processed_images_320')
     checkpoint_dir = os.path.join(project_root, 'checkpoints')
     indices_path = os.path.join(project_root, 'outputs', 'test_indices.npy')
     output_plot = os.path.join(project_root, 'outputs', 'ensemble_visualization.png')

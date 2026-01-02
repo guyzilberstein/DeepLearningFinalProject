@@ -3,7 +3,7 @@ Ensemble evaluation: Load multiple models and average their predictions.
 This reduces variance and typically improves accuracy by 5-10%.
 """
 import torch
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 import numpy as np
 import os
 import sys
@@ -51,13 +51,12 @@ def ensemble_evaluate(model_names=None):
         ]
     
     # 1. Setup
-    csv_file = os.path.join(project_root, 'data', 'dataset.csv')
-    img_dir = os.path.join(project_root, 'data', 'processed_images_256')
+    test_csv = os.path.join(project_root, 'data', 'test_dataset.csv')
+    img_dir = os.path.join(project_root, 'data', 'processed_images_320')
     checkpoint_dir = os.path.join(project_root, 'checkpoints')
-    indices_path = os.path.join(project_root, 'outputs', 'test_indices.npy')
     
-    if not os.path.exists(indices_path):
-        print(f"Test indices {indices_path} not found. Run train.py first.")
+    if not os.path.exists(test_csv):
+        print(f"Test dataset {test_csv} not found. Run normalize_coords.py first.")
         return
     
     # 2. Load Models
@@ -87,10 +86,8 @@ def ensemble_evaluate(model_names=None):
     print(f"\nEnsemble size: {len(models)} models")
     print(f"{'='*60}\n")
     
-    # 3. Load Test Data
-    full_dataset = CampusDataset(csv_file=csv_file, root_dir=img_dir)
-    test_indices = np.load(indices_path)
-    test_dataset = Subset(full_dataset, test_indices)
+    # 3. Load Test Data (external test set)
+    test_dataset = CampusDataset(csv_file=test_csv, root_dir=img_dir, is_train=False)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
     
     print(f"Evaluating on {len(test_dataset)} test samples...")
