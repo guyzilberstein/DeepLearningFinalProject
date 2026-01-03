@@ -10,3 +10,10 @@ data/raw_photos/
 data/processed_images/
 data/processed_images_256/
 data/processed_images_384/
+
+# Only keep the 3 ensemble checkpoints (320 seeds)
+checkpoints/best_b0_256_*.pth
+checkpoints/best_b0_ensemble_*.pth
+checkpoints/best_b3_*.pth
+checkpoints/best_v2s_*.pth
+checkpoints/best_campus_locator.pth
