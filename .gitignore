@@ -1,6 +1,7 @@
 .DS_Store
 __pycache__/
 *.pyc
-*.pth
 outputs/
 
+# Raw photos stored on Google Drive (too large for git)
+data/raw_photos/
