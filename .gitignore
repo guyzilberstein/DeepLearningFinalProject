@@ -5,3 +5,8 @@ outputs/
 
 # Raw photos stored on Google Drive (too large for git)
 data/raw_photos/
+
+# Only keep processed_images_320 in git (regenerate others with convert_images.py)
+data/processed_images/
+data/processed_images_256/
+data/processed_images_384/
