@@ -24,16 +24,16 @@ sys.path.insert(0, project_root)
 from src.model.network import CampusLocator
 
 # Configuration
-INPUT_SIZE = 256
+INPUT_SIZE = 320
 MODEL_NAMES = [
-    'best_b0_ensemble_s42.pth',
-    'best_b0_ensemble_s100.pth', 
-    'best_b0_ensemble_s123.pth'
+    'best_b0_320_seed42.pth',
+    'best_b0_320_seed123.pth', 
+    'best_b0_320_seed456.pth'
 ]
 
 # Reference point for coordinate conversion (center of training data)
-REF_LAT = 31.261985
-REF_LON = 34.802878
+REF_LAT = 31.261976298245617
+REF_LON = 34.80279455555555
 METERS_PER_LAT = 111132.0
 METERS_PER_LON = 111132.0 * np.cos(np.radians(REF_LAT))
 

@@ -52,7 +52,7 @@ def visualize_worst_ensemble(num_worst=25):
     indices_path = os.path.join(project_root, 'outputs', 'test_indices.npy')
     output_plot = os.path.join(project_root, 'outputs', 'worst_ensemble_visualization.png')
     
-    model_names = ['b0_ensemble_s42', 'b0_ensemble_s100', 'b0_ensemble_s123']
+    model_names = ['b0_320_seed42', 'b0_320_seed123', 'b0_320_seed456']
     
     # Load reference point
     df_full = pd.read_csv(csv_file)

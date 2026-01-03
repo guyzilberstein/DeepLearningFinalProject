@@ -45,9 +45,9 @@ def ensemble_evaluate(model_names=None):
     # Default ensemble if not specified
     if model_names is None:
         model_names = [
-            'b0_256_mlp',        # Original (seed 42)
-            'b0_256_mlp_seed100',
-            'b0_256_mlp_seed123'
+            'b0_320_seed42',
+            'b0_320_seed123',
+            'b0_320_seed456'
         ]
     
     # 1. Setup
