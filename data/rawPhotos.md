@@ -21,7 +21,7 @@ data/
 
 The original HEIC photos are stored on Google Drive to keep the repository lightweight.
 
-**Download link:** [Google Drive - DeepLearningFinalProject_RawPhotos](https://drive.google.com/drive/folders/1P3ePrcjLZNyNx85o62SDG4hXa4oDz908?usp=sharing)
+**Download link:** [Google Drive - Raw Photos](https://drive.google.com/drive/folders/1P3ePrcjLZNyNx85o62SDG4hXa4oDz908?usp=sharing)
 
 ### When do you need raw photos?
 - Only if you want to reprocess images at a different resolution

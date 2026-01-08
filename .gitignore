@@ -11,7 +11,11 @@ data/processed_images/
 data/processed_images_256/
 data/processed_images_384/
 
-# Only keep the 3 ensemble checkpoints (320 seeds)
+# Large model checkpoints (hosted on Google Drive)
+# ConvNeXt models are ~324MB each - too large for GitHub
+checkpoints/best_convnext_*.pth
+
+# Legacy/old checkpoints (not needed)
 checkpoints/best_b0_256_*.pth
 checkpoints/best_b0_ensemble_*.pth
 checkpoints/best_b3_*.pth
