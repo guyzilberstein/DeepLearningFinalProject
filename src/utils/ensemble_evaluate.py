@@ -3,6 +3,7 @@ Ensemble evaluation: Load multiple models and average their predictions.
 This reduces variance and typically improves accuracy by 5-10%.
 """
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 import numpy as np
 import os
@@ -15,12 +16,29 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 from src.model.dataset import CampusDataset
-from src.model.network import CampusLocator
+from src.model.network import CampusLocator as ConvNeXtLocator
+from src.model.efficientnet import EfficientNetLocator
 
 
-def load_model(model_path, device):
-    """Load a single model from checkpoint."""
-    model = CampusLocator().to(device)
+def load_model(model_path, device, model_name=""):
+    """
+    Load a single model from checkpoint.
+    Automatically detects if it's ConvNeXt or EfficientNet based on name/checkpoint.
+    """
+    # Heuristic: ConvNeXt checkpoints usually have "convnext" in name
+    # or we can check the checkpoint keys if unsure.
+    # For this project:
+    # "convnext" -> ConvNeXtLocator
+    # "b0" or "efficientnet" -> EfficientNetLocator
+    # "campus_locator" -> ConvNeXtLocator (current default)
+    
+    if "b0" in model_name or "efficientnet" in model_name:
+        model = EfficientNetLocator().to(device)
+        print(f"  Architecture: EfficientNet-B0")
+    else:
+        model = ConvNeXtLocator().to(device)
+        print(f"  Architecture: ConvNeXt-Tiny")
+        
     checkpoint = torch.load(model_path, map_location=device)
     
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
@@ -45,9 +63,9 @@ def ensemble_evaluate(model_names=None):
     # Default ensemble if not specified
     if model_names is None:
         model_names = [
-            'b0_320_seed42',
-            'b0_320_seed123',
-            'b0_320_seed456'
+            'convnext_tiny_v1',
+            'convnext_tiny_v2',
+            'convnext_tiny_v3'
         ]
     
     # 1. Setup
@@ -67,6 +85,7 @@ def ensemble_evaluate(model_names=None):
     print(f"{'='*60}")
     
     models = []
+    valid_names = []
     for name in model_names:
         checkpoint_filename = f'best_{name}.pth' if name != "default" else 'best_campus_locator.pth'
         model_path = os.path.join(checkpoint_dir, checkpoint_filename)
@@ -75,9 +94,14 @@ def ensemble_evaluate(model_names=None):
             print(f"WARNING: Model {model_path} not found. Skipping.")
             continue
         
-        model, best_loss = load_model(model_path, device)
-        models.append(model)
-        print(f"  Loaded: {name} (val_loss: {best_loss})")
+        try:
+            print(f"Loading: {name}")
+            model, best_loss = load_model(model_path, device, model_name=name)
+            models.append(model)
+            valid_names.append(name)
+            print(f"  Success (val_loss: {best_loss})")
+        except Exception as e:
+            print(f"  Error loading {name}: {e}")
     
     if len(models) == 0:
         print("ERROR: No models loaded. Cannot evaluate ensemble.")
@@ -135,7 +159,7 @@ def ensemble_evaluate(model_names=None):
         model_errors = np.linalg.norm(model_preds - all_labels, axis=1)
         model_mean = np.mean(model_errors)
         model_median = np.median(model_errors)
-        print(f"  Model {i+1} ({model_names[i]}): Mean={model_mean:.2f}m, Median={model_median:.2f}m")
+        print(f"  Model {i+1} ({valid_names[i]}): Mean={model_mean:.2f}m, Median={model_median:.2f}m")
     
     # 7. Print Ensemble Results
     print("\n" + "="*60)
@@ -168,4 +192,3 @@ if __name__ == "__main__":
     else:
         # Use default ensemble
         ensemble_evaluate()
-

@@ -4,23 +4,33 @@ from torchvision import models
 class CampusLocator(nn.Module):
     def __init__(self):
         super(CampusLocator, self).__init__()
-        # EfficientNet-B0 backbone with pretrained ImageNet weights
-        # Best fit for ~1800 images (5.3M params)
-        self.backbone = models.efficientnet_b0(weights='DEFAULT')
+        # Use ConvNeXt Tiny (28M params)
+        # Weights: IMAGENET1K_V1 (Standard pre-training)
+        self.backbone = models.convnext_tiny(weights='DEFAULT')
         
-        # Get input features of the final layer (1280 for B0)
-        in_features = self.backbone.classifier[1].in_features
+        # ConvNeXt classifier structure in torchvision:
+        # Sequential(
+        #   [0] LayerNorm2d((768,), eps=1e-06, elementwise_affine=True),
+        #   [1] Flatten(start_dim=1, end_dim=-1),
+        #   [2] Linear(in_features=768, out_features=1000, bias=True)
+        # )
         
-        # Replace classifier with a Regression MLP Head
-        # MLP allows non-linear relationships between features and GPS
-        self.backbone.classifier = nn.Sequential(
+        # We need to access the input features of the final Linear layer [2]
+        in_features = self.backbone.classifier[2].in_features  # Should be 768
+        
+        # Create Custom Regression Head
+        # Using GELU to match ConvNeXt's internal activation function
+        regression_head = nn.Sequential(
             nn.Linear(in_features, 512),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Dropout(0.3),          # Regularization
             nn.Linear(512, 128),
-            nn.ReLU(),
+            nn.GELU(),
             nn.Linear(128, 2)         # Output: x_meters, y_meters
         )
+        
+        # Replace only the final Linear layer, keeping LayerNorm and Flatten
+        self.backbone.classifier[2] = regression_head
 
     def forward(self, x):
         return self.backbone(x)

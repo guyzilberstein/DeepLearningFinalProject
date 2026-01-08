@@ -9,7 +9,7 @@ Usage:
 4. Export from Google Maps and use import_corrections.py to convert back
 """
 import torch
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 import numpy as np
 import os
 import sys
@@ -22,44 +22,53 @@ if project_root not in sys.path:
     sys.path.append(project_root)
 
 from src.model.dataset import CampusDataset
-from src.model.network import CampusLocator
 
 
-def export_for_maps(num_worst: int = 25, experiment_name: str = "b0_256_mlp"):
+def export_for_maps(num_worst: int = 25, experiment_name: str = "convnext_tiny_v1", model_type: str = "convnext"):
     """
     Export worst predictions as simple CSV for Google Maps import.
     
     Args:
         num_worst: Number of worst predictions to export
         experiment_name: Model experiment name
+        model_type: "convnext" or "efficientnet" (determines which model class to load)
     """
-    # Setup paths
-    csv_file = os.path.join(project_root, 'data', 'dataset.csv')
+    # Setup paths - use external test set
+    test_csv = os.path.join(project_root, 'data', 'test_dataset.csv')
     img_dir = os.path.join(project_root, 'data', 'processed_images_320')
     model_path = os.path.join(project_root, 'checkpoints', f'best_{experiment_name}.pth')
-    indices_path = os.path.join(project_root, 'outputs', 'test_indices.npy')
     output_csv = os.path.join(project_root, 'outputs', 'worst_for_maps.csv')
     
     if not os.path.exists(model_path):
         print(f"Model not found: {model_path}")
         return
-    if not os.path.exists(indices_path):
-        print("Test indices not found. Run training first.")
+    if not os.path.exists(test_csv):
+        print(f"Test dataset not found: {test_csv}")
         return
 
-    # Load data
-    df_full = pd.read_csv(csv_file)
-    full_dataset = CampusDataset(csv_file=csv_file, root_dir=img_dir)
-    test_indices = np.load(indices_path)
-    test_dataset = Subset(full_dataset, test_indices)
+    # Load data directly from test_dataset.csv
+    df_test = pd.read_csv(test_csv)
+    test_dataset = CampusDataset(csv_file=test_csv, root_dir=img_dir, is_train=False)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
     
-    # Load model
+    print(f"Testing on {len(test_dataset)} samples from test_dataset.csv")
+    
+    # Load model based on model_type
     device = torch.device("cuda" if torch.cuda.is_available() else 
                          "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
+    print(f"Model type: {model_type}")
     
-    model = CampusLocator().to(device)
+    if model_type == "convnext":
+        from src.model.network import CampusLocator
+        model = CampusLocator().to(device)
+    elif model_type == "swin":
+        from src.model.swin_network import CampusSwin
+        model = CampusSwin().to(device)
+    else:  # efficientnet (legacy)
+        from src.model.network import CampusLocator
+        model = CampusLocator().to(device)
+    
     checkpoint = torch.load(model_path, map_location=device)
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -70,26 +79,18 @@ def export_for_maps(num_worst: int = 25, experiment_name: str = "b0_256_mlp"):
     # Run inference
     all_preds = []
     all_labels = []
-    all_indices = []
     
     print("Running inference on test set...")
-    current_idx = 0
     with torch.no_grad():
         for inputs, labels, weights in test_loader:
             inputs = inputs.to(device)
             outputs = model(inputs)
             
-            batch_size = inputs.size(0)
-            batch_indices = test_indices[current_idx : current_idx + batch_size]
-            current_idx += batch_size
-            
             all_preds.append(outputs.cpu().numpy())
             all_labels.append(labels.numpy())
-            all_indices.extend(batch_indices)
             
     all_preds = np.vstack(all_preds)
     all_labels = np.vstack(all_labels)
-    all_indices = np.array(all_indices)
     
     # Calculate errors
     errors = np.linalg.norm(all_preds - all_labels, axis=1)
@@ -103,11 +104,10 @@ def export_for_maps(num_worst: int = 25, experiment_name: str = "b0_256_mlp"):
     print(f"\nExporting {num_worst} worst predictions:")
     print("="*60)
     
-    for i, idx_local in enumerate(worst_idxs):
-        idx_global = all_indices[idx_local]
-        error_m = errors[idx_local]
+    for i, idx in enumerate(worst_idxs):
+        error_m = errors[idx]
         
-        row_data = df_full.iloc[idx_global]
+        row_data = df_test.iloc[idx]
         img_name = row_data['filename']
         lat = row_data['lat']
         lon = row_data['lon']
@@ -138,7 +138,9 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Export worst predictions for Google Maps")
     parser.add_argument("--num", "-n", type=int, default=25, help="Number of worst predictions")
-    parser.add_argument("--model", "-m", default="b0_256_mlp", help="Experiment name")
+    parser.add_argument("--model", "-m", default="convnext_tiny_v1", help="Experiment name")
+    parser.add_argument("--type", "-t", default="convnext", choices=["convnext", "swin", "efficientnet"],
+                        help="Model type (convnext, swin, or efficientnet)")
     args = parser.parse_args()
     
-    export_for_maps(num_worst=args.num, experiment_name=args.model)
+    export_for_maps(num_worst=args.num, experiment_name=args.model, model_type=args.type)

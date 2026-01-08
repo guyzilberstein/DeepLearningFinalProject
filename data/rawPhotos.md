@@ -8,8 +8,7 @@ The processed images are already in the repository - no additional setup needed 
 
 ```
 data/
-├── processed_images_256/    # 256x256 JPG images (in repo)
-├── processed_images_320/    # 320x320 JPG images (in repo)
+├── processed_images_320/    # 320x320 JPG images (Main resolution used)
 ├── raw_photos/              # Original HEIC files (download separately)
 ├── metadata_raw/            # GPS metadata CSVs
 ├── dataset.csv              # Training pool (2,248 samples)

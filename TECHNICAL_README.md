@@ -1,7 +1,7 @@
 # Campus Image-to-GPS Localization - Technical Documentation
 
 > **Goal**: Predict GPS coordinates from single campus images with sub-10 meter mean error.  
-> **Final Result**: **8.17m mean error** (7.33m median) using an ensemble of 3 models.
+> **Final Result**: **7.16m mean error** (6.48m median) using a ConvNeXt-Tiny ensemble.
 
 ---
 
@@ -20,13 +20,14 @@
 ```
 DeepLearningFinalProject/
 ├── data/
-│   ├── raw_photos/               # Original HEIC photos (not in git - see data/README.md)
+│   ├── raw_photos/               # Original HEIC photos (view rawPhotos.md)
 │   ├── processed_images_320/     # Resized 320x320 JPGs for training
 │   ├── metadata_raw/             # Per-folder CSV files with EXIF data
-│   ├── dataset.csv               # Training pool (2,248 samples)
+│   ├── dataset.csv               # Training pool (~2,200 samples)
 │   ├── test_dataset.csv          # External test set (1,023 samples)
 │   ├── night_holdout.csv         # Night-specific evaluation set (54 samples)
-│   ├── corrections_batch*.csv    # Manual GPS corrections
+│   ├── corrections_batch*.csv    # Manual GPS corrections (Training set)
+│   ├── test_corrections_*.csv    # Manual GPS corrections (Test set)
 │   └── reference_coords.json     # Reference lat/lon for coordinate conversion
 ├── src/
 │   ├── data_prep/                # Data processing scripts
@@ -123,7 +124,7 @@ For manually correcting inaccurate GPS labels:
 
 3. **Convert back to corrections format**:
    ```bash
-   python src/utils/import_corrections.py exported.csv --output corrections_batch5.csv
+   python src/utils/import_corrections.py exported.csv --output data/corrections_batch5.csv
    ```
 
 4. **Regenerate dataset** (corrections are auto-applied):
@@ -135,29 +136,28 @@ For manually correcting inaccurate GPS labels:
 
 ## Model Architecture
 
-### Backbone: EfficientNet-B0
+### Backbone: ConvNeXt-Tiny
 **File**: `src/model/network.py`
 
-**Why EfficientNet-B0?**
-- 5.3M parameters — optimal for ~2,000 training images
-- Pretrained on ImageNet — strong feature extraction out-of-box
-- Efficient inference — suitable for mobile deployment
+**Why ConvNeXt-Tiny?**
+- **Modern CNN (2022):** Designed to compete with Transformers.
+- **Large Kernel (7x7):** Captures larger spatial context than EfficientNet's 3x3 kernels.
+- **Performance:** 28M parameters. Outperformed EfficientNet-B0 (5.3M) significantly on this task, especially for **night images** (mean error 7.43m vs 9.39m).
 
 ### Regression Head: Custom MLP
 ```
-EfficientNet-B0 (1280 features)
+ConvNeXt-Tiny (768 features)
       ↓
-Linear(1280 → 512) + ReLU + Dropout(0.3)
+Linear(768 → 512) + GELU + Dropout(0.3)
       ↓
-Linear(512 → 128) + ReLU
+Linear(512 → 128) + GELU
       ↓
 Linear(128 → 2)  →  [x_meters, y_meters]
 ```
 
-**Why MLP instead of Linear?**
-- Captures non-linear relationships between visual features and GPS
-- Dropout (0.3) prevents overfitting
-- 2-layer hidden structure balances expressiveness with regularization
+**Features:**
+- Uses **GELU** activation (smoother than ReLU).
+- Preserves ConvNeXt's native **LayerNorm** and **Flatten** layers before the head.
 
 ---
 
@@ -169,36 +169,14 @@ Linear(128 → 2)  →  [x_meters, y_meters]
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
-| **Input Size** | 320×320 | Higher resolution captures fine landmarks (56% more pixels than 256) |
-| **Batch Size** | 32 (GPU) / 8 (MPS) | Auto-detected based on hardware |
-| **Learning Rate** | 0.0001 | Conservative for fine-tuning pretrained backbone |
-| **Weight Decay** | 1e-4 | L2 regularization prevents overfitting |
-| **Optimizer** | Adam | Adaptive learning rates per parameter |
-| **Loss Function** | HuberLoss (δ=1.0) | Robust to GPS label noise |
+| **Input Size** | 320×320 | Optimal balance of detail and receptive field |
+| **Batch Size** | 24 (GPU) | Tuned for GTX 1080 Ti memory limits |
+| **Optimizer** | AdamW | Better regularization/weight decay handling than Adam |
+| **Learning Rate** | 1e-4 | Standard fine-tuning rate |
+| **Weight Decay** | 1e-4 | L2 regularization |
+| **Loss Function** | HuberLoss (δ=1.0) | Robust to GPS label noise (linear for >1m error) |
 | **Scheduler** | ReduceLROnPlateau | factor=0.5, patience=7 |
-| **Train/Val Split** | 85/15 | Stratified by location |
-
-### Loss Function: HuberLoss
-
-**Why Huber over MSE?**
-- GPS labels can be inaccurate (phone GPS error, obstructed signal)
-- HuberLoss is **linear for large errors** (outliers don't dominate training)
-- **Quadratic for small errors** (fine-tuning near correct values)
-
-```python
-# δ=1.0: Transition from quadratic to linear at 1 meter error
-criterion = nn.HuberLoss(delta=1.0)
-```
-
-### Learning Rate Scheduler
-
-```python
-scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=7)
-```
-
-**Settings**:
-- **patience=7**: Wait 7 epochs before reducing LR (prevents premature reduction)
-- **factor=0.5**: Halve LR (gentler than 0.1) to allow continued learning
+| **Epochs** | 100-125 | Models typically converge around epoch 90-100 |
 
 ### Data Augmentation
 
@@ -211,11 +189,6 @@ scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=7)
 | ColorJitter | B=0.3, C=0.3, S=0.3, H=0.1 | Time-of-day invariance |
 | Night Simulation | brightness=0.4-0.7, p=0.2 | Low-light robustness |
 | RandomErasing | scale=0.02-0.15, p=0.2 | Occlusion simulation (trees, people) |
-
-**Design Decisions**:
-- Perspective kept gentle (0.2 vs 0.3) — extreme distortion changes apparent location
-- Night simulation at 40-70% brightness — avoids fully black images
-- Hue shift (0.1) enables time-of-day generalization
 
 ---
 
@@ -232,17 +205,18 @@ scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=7)
 
 **Evaluate single model**:
 ```bash
-python src/training/evaluate.py b0_320_seed42
-```
-
-**Evaluate night performance**:
-```bash
-python src/utils/evaluate_night.py b0_320_seed42
+python src/training/evaluate.py convnext_tiny_v1
 ```
 
 **Evaluate ensemble (3 models)**:
 ```bash
-python src/utils/ensemble_evaluate.py b0_320_seed42 b0_320_seed100 b0_320_seed123
+# Automatically loads v1, v2, v3
+python src/utils/ensemble_evaluate.py convnext_tiny_v1 convnext_tiny_v2 convnext_tiny_v3
+```
+
+**Visualize Worst Predictions**:
+```bash
+python src/utils/visualize_worst.py --experiment convnext_tiny_v1
 ```
 
 ### Ensemble Strategy
@@ -251,14 +225,27 @@ Training 3 models with different random seeds and averaging predictions:
 
 ```
 Model 1 (seed=42)  ──┐
-Model 2 (seed=123) ──┼──→ Average → Final Prediction
+Model 2 (seed=123) ──┼──→ Mean(x, y) → Final Prediction
 Model 3 (seed=456) ──┘
 ```
 
-**Why Ensemble?**
-- Each model has slightly different "blind spots"
-- Averaging reduces variance by ~4-5%
-- Final result: 8.17m (ensemble) vs 8.54m (best individual)
+**Performance Gain:**
+- Best Single Model: **7.46m**
+- Ensemble: **7.16m** (4% improvement)
+
+---
+
+## Final Model Performance
+
+| Metric | Test Set (1,023) |
+|--------|------------------|
+| **Mean Error** | **7.16m** |
+| **Median Error** | **6.48m** |
+| **Under 10m** | **76%** |
+| **Under 20m** | **99%** |
+| **Catastrophic (>30m)** | **0 samples** |
+
+*Achieved with ConvNeXt-Tiny Ensemble (v1, v2, v3).*
 
 ---
 
@@ -266,85 +253,35 @@ Model 3 (seed=456) ──┘
 
 ### Data Preparation (`src/data_prep/`)
 
-| File | Purpose | Usage |
-|------|---------|-------|
-| `extract_metadata.py` | Extract EXIF GPS data from raw photos | `python extract_metadata.py [--folders F1 F2]` |
-| `convert_images.py` | Convert HEIC → 320×320 JPG | `python convert_images.py` |
-| `normalize_coords.py` | Generate dataset.csv with local coordinates | `python normalize_coords.py` |
-| `extract_problematic.py` | Move high-error test photos to training (Active Learning) | `python extract_problematic.py --threshold 20` |
+| File | Purpose |
+|------|---------|
+| `extract_metadata.py` | Extract EXIF GPS data from raw photos |
+| `convert_images.py` | Convert HEIC → 320×320 JPG |
+| `normalize_coords.py` | Generate dataset.csv with local coordinates |
+| `extract_problematic.py` | Move high-error test photos to training (Active Learning) |
 
 ### Model (`src/model/`)
 
 | File | Purpose |
 |------|---------|
-| `network.py` | CampusLocator model definition (EfficientNet-B0 + MLP head) |
+| `network.py` | **Main Model** (ConvNeXt-Tiny + MLP head) |
+| `efficientnet.py` | Legacy Model (EfficientNet-B0) - used for loading old checkpoints |
 | `dataset.py` | PyTorch Dataset class with augmentation pipeline |
 
 ### Training (`src/training/`)
 
-| File | Purpose | Usage |
-|------|---------|-------|
-| `train.py` | Main training loop | `python train.py` or with args: `--experiment_name b0_v1 --num_epochs 100 --seed 42` |
-| `evaluate.py` | Evaluate on test set | `python evaluate.py [experiment_name]` |
+| File | Purpose |
+|------|---------|
+| `train.py` | Main training loop |
+| `evaluate.py` | Evaluate a single model on test set |
 
 ### Utilities (`src/utils/`)
 
-| File | Purpose | Usage |
-|------|---------|-------|
-| `evaluate_night.py` | Evaluate on night holdout | `python evaluate_night.py [experiment_name]` |
-| `ensemble_evaluate.py` | Evaluate ensemble of models | `python ensemble_evaluate.py model1 model2 model3` |
-| `visualize_worst.py` | Plot 25 worst predictions with maps | `python visualize_worst.py --experiment b0_v3` |
-| `visualize_augmentations.py` | Preview data augmentation effects | `python visualize_augmentations.py --images 5 --augs 10` |
-| `visualize_results.py` | Plot best/random/worst samples | `python visualize_results.py` |
-| `visualize_ensemble.py` | Visualize ensemble predictions | `python visualize_ensemble.py` |
-| `visualize_worst_ensemble.py` | Plot worst ensemble predictions | `python visualize_worst_ensemble.py` |
-| `export_worst_for_audit.py` | Export worst predictions for GPS correction | `python export_worst_for_audit.py --num 25` |
-| `import_corrections.py` | Convert corrected coords to batch format | `python import_corrections.py input.csv` |
-
-### Root Directory
-
 | File | Purpose |
 |------|---------|
-| `predict.py` | **Inference script** — Predict GPS from a single image using ensemble |
-| `project_journal.md` | Development log with all experiments and decisions |
-| `README.md` | Project overview |
-| `TECHNICAL_README.md` | This file — detailed technical documentation |
-
----
-
-## Quick Reference: Training a New Model
-
-```bash
-# 1. Prepare data (if new photos added)
-python src/data_prep/extract_metadata.py --folders NewFolder
-python src/data_prep/convert_images.py
-python src/data_prep/normalize_coords.py
-
-# 2. Train (local)
-python src/training/train.py --experiment_name my_model --num_epochs 100 --seed 42
-
-# 3. Train (cluster with nohup)
-nohup python src/training/train.py --experiment_name my_model --num_epochs 200 > training.log 2>&1 &
-
-# 4. Evaluate
-python src/training/evaluate.py my_model
-python src/utils/evaluate_night.py my_model
-
-# 5. Visualize errors
-python src/utils/visualize_worst.py --experiment my_model
-```
-
----
-
-## Final Model Performance
-
-| Metric | Test Set (1,023) | Night Holdout (54) |
-|--------|------------------|-------------------|
-| Mean Error | **8.17m** | 9.39m |
-| Median Error | **7.33m** | 7.32m |
-| Under 10m | ~60% | 59.3% |
-| Under 20m | ~95% | 90.7% |
-| Over 30m | 1 sample | **0 samples** |
-
-*Achieved with 3-model ensemble (seeds 42, 123, 456), 320×320 resolution, 200 epochs.*
+| `ensemble_evaluate.py` | Evaluate ensemble (supports mixed architectures) |
+| `visualize_worst.py` | Plot 25 worst predictions with maps |
+| `export_worst_for_audit.py` | Export worst predictions for GPS correction |
+| `analyze_hardest_samples.py` | Find intersection of failures across models |
+| `import_corrections.py` | Convert corrected coords to batch format |
 

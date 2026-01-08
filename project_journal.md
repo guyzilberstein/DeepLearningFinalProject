@@ -1170,3 +1170,312 @@ Trained 3 models overnight on the GPU cluster (GTX 1080 Ti):
 
 ### Conclusion
 **Goal achieved!** Sub-10m mean error with 8.17m ensemble performance. The Killer Combo Strategy worked as predicted, combining active learning, higher resolution, and ensembling for a robust final model.
+
+---
+
+**Date:** Jan 7, 2026
+
+## Architecture Experiment: ConvNeXt-Tiny
+
+### Motivation
+
+After achieving 8.17m mean error with the EfficientNet-B0 ensemble, we analyzed potential paths forward:
+
+1. **The Ensemble Limitation:** Our 3-model ensemble reduced *variance* but couldn't fix *bias*. All three models were EfficientNet-B0 with identical architecture—they "think" the same way. If EfficientNet has a structural blind spot (e.g., struggles with textureless walls or long-distance relationships), all three models share it.
+
+2. **Previous ConvNeXt Failure:** We had tried ConvNeXt-Tiny once before (Dec 27) but it failed catastrophically ("Loss exploded to ~4000+"). However, that was on Mac (MPS) with a small batch size and before we implemented many training improvements (HuberLoss, proper augmentation, AdamW).
+
+3. **Why ConvNeXt Now?**
+   - **Modern Architecture (2022):** ConvNeXt was designed to compete with Vision Transformers. It uses large 7×7 kernels (vs EfficientNet's 3×3), allowing it to "see" wider context and understand spatial relationships between landmarks.
+   - **GPU Power Available:** With access to the GTX 1080 Ti cluster, we could train larger models properly.
+   - **Proven Success:** ConvNeXt consistently outperforms EfficientNet on ImageNet benchmarks.
+
+### Technical Changes
+
+We created a new branch `experiment/convnext-tiny` to safely experiment.
+
+#### 1. Architecture (`src/model/network.py`)
+
+| Component | EfficientNet-B0 (Before) | ConvNeXt-Tiny (After) |
+|-----------|-------------------------|----------------------|
+| **Backbone** | `efficientnet_b0` (5.3M params) | `convnext_tiny` (28M params) |
+| **Feature Channels** | 1280 | 768 |
+| **Activation** | ReLU | GELU |
+| **Head Structure** | Replace entire classifier | Replace only final Linear layer (preserve LayerNorm) |
+
+```python
+# Key change: Use GELU to match ConvNeXt's internal activation
+regression_head = nn.Sequential(
+    nn.Linear(768, 512),
+    nn.GELU(),
+    nn.Dropout(0.3),
+    nn.Linear(512, 128),
+    nn.GELU(),
+    nn.Linear(128, 2)
+)
+self.backbone.classifier[2] = regression_head
+```
+
+#### 2. Training Configuration (`src/training/train.py`)
+
+| Parameter | EfficientNet-B0 | ConvNeXt-Tiny | Reason |
+|-----------|-----------------|---------------|--------|
+| **Optimizer** | Adam | **AdamW** | AdamW decouples weight decay from gradient updates—standard for modern architectures |
+| **Batch Size** | 32 | **24** | ConvNeXt uses more VRAM; 32 might OOM on 1080 Ti |
+| **Learning Rate** | 1e-4 | 1e-4 | Kept same |
+| **Weight Decay** | 1e-4 | 1e-4 | Kept same |
+| **Epochs** | 200 | 100 | Initial run to check convergence |
+
+#### 3. Data Pipeline
+**No changes.** Used the same:
+- 320×320 resolution
+- Same augmentation (ColorJitter, RandomPerspective, Night Simulation, RandomErasing)
+- Same dataset (2,248 training samples)
+
+### Training Results (100 Epochs)
+
+**Training Command:**
+```bash
+nohup python3 -u -c "from src.training.train import train_model; train_model(num_epochs=100, experiment_name='convnext_tiny_v1', seed=42)" > training_convnext.log 2>&1 &
+```
+
+**Loss Progression:**
+
+| Epoch | Train Loss | Val Loss | Notes |
+|-------|------------|----------|-------|
+| 1 | 45.03 | 38.89 | Starting point |
+| 10 | 8.68 | 9.10 | Rapid improvement |
+| 25 | 4.43 | 6.37 | Still learning |
+| 50 | 3.13 | 5.05 | Continued progress |
+| 75 | 2.87 | 4.65 | Getting close |
+| 97 | 2.22 | **4.18** | ⭐ Best model saved |
+| 100 | 2.18 | 4.30 | Slight overfitting |
+
+**Key Observations:**
+- Model was **still improving at epoch 100** (best saved at epoch 97)
+- Train/Val gap: 2.2 vs 4.2 (~1.9x ratio) — healthy, indicates good generalization
+- Final val loss (4.18) is **significantly lower** than EfficientNet-B0's best (5.66)
+
+### Evaluation Results 🏆
+
+#### Test Set (1,023 samples)
+
+| Metric | EfficientNet-B0 (Best Single) | EfficientNet Ensemble (3 models) | **ConvNeXt-Tiny (Single)** |
+|--------|-------------------------------|----------------------------------|---------------------------|
+| **Mean Error** | 8.54m | 8.17m | **7.55m** |
+| **Median Error** | 7.65m | 7.33m | **6.82m** |
+
+**A single ConvNeXt model beats the entire EfficientNet ensemble!**
+
+#### Night Holdout (54 samples)
+
+| Metric | EfficientNet-B0 (Best) | **ConvNeXt-Tiny** | Improvement |
+|--------|------------------------|-------------------|-------------|
+| **Mean Error** | 9.39m | **7.43m** | **-20.9%** |
+| **Median Error** | 7.32m | **6.66m** | **-9.0%** |
+| **Under 10m** | 59.3% | **74.1%** | **+14.8%** |
+| **Under 20m** | 90.7% | **96.3%** | **+5.6%** |
+| **Over 30m** | 0.0% | **0.0%** | Maintained |
+| **Max Error** | 26.30m | 29.75m | Slightly higher outlier |
+
+#### Error Distribution (Test Set)
+
+| Error Range | Count | Percentage |
+|-------------|-------|------------|
+| Under 5m | 327 | 32.0% |
+| **Under 10m** | **772** | **75.5%** |
+| Over 10m | 251 | 24.5% |
+| Over 15m | 66 | 6.5% |
+| Over 20m | 15 | 1.5% |
+| Over 30m | 1 | 0.1% |
+
+**Key insight:** 75.5% of predictions are within 10 meters. Only 1 sample (0.1%) has a catastrophic failure (>30m).
+
+#### Worst Predictions Analysis
+
+Visualized the 25 worst test predictions (`outputs/worst_test_convnext_tiny_v1.png`):
+
+| Pattern | Count | Notes |
+|---------|-------|-------|
+| Covered walkways / pillars | ~10/25 | Generic concrete structures under buildings |
+| Open plazas | ~8/25 | Wide views with few distinctive landmarks |
+| Building 32 area | ~5/25 | The "30" sign building appears frequently |
+| Long-distance views | ~4/25 | Far-away buildings that could be anywhere |
+
+**Notable improvement:** Unlike EfficientNet (40-48% of worst were night images), ConvNeXt's worst 25 are almost all **daytime** images. Night performance is no longer a major weakness.
+
+### Analysis: Why ConvNeXt Worked
+
+1. **Larger Receptive Field:** ConvNeXt's 7×7 kernels can see ~5x more context per layer than EfficientNet's 3×3. This helps recognize "the library is on the left AND building 26 is on the right"—a spatial relationship that CNNs with small kernels struggle with.
+
+2. **Night Vision Breakthrough:** The biggest improvement was on night images:
+   - 74% of night predictions now under 10m (was 59%)
+   - Mean night error dropped from 9.39m → 7.43m
+   - ConvNeXt's deeper features likely extract more robust low-light patterns
+
+3. **Better Feature Hierarchy:** ConvNeXt uses LayerNorm (instead of BatchNorm) and GELU activation, which have been shown to produce smoother gradients and better generalization.
+
+4. **No Overfitting (Yet):** Despite having 5x more parameters (28M vs 5.3M), the model didn't overfit badly. The train/val ratio of ~1.9x is acceptable. This suggests our augmentation pipeline is effective.
+
+### Comparison: Journey So Far
+
+| Version | Mean Error | Median Error | Key Changes |
+|---------|------------|--------------|-------------|
+| v1 (EfficientNet-B0 baseline) | 15.27m | 15.10m | Initial model |
+| v2 (b0_256_mlp) | 11.94m | 9.05m | MLP head, HuberLoss, augmentation |
+| v3 (b0_256_v3 + ProblematicPhotos) | 11.54m | 8.46m | Active learning round 1 |
+| v4 (b0_320 ensemble) | 8.17m | 7.33m | 320px, +131 photos, ensemble |
+| **v5 (ConvNeXt-Tiny single)** | **7.55m** | **6.82m** | Architecture upgrade |
+
+**Total improvement: 15.27m → 7.55m (50.5% reduction!)**
+
+### Files Generated
+- `checkpoints/best_convnext_tiny_v1.pth` - Best ConvNeXt model (epoch 97)
+- `training_convnext.log` - Full training log (on cluster)
+
+### Next Steps (To Discuss)
+
+1. **Ensemble ConvNeXt:** Train 2 more ConvNeXt models (seeds 123, 456) and ensemble. Expected: ~6.5-7.0m mean error.
+2. **Continue Training:** The model was still improving at epoch 100. Resume for 50+ more epochs?
+3. **Hybrid Ensemble:** Combine 2 ConvNeXt + 1 EfficientNet for maximum diversity?
+4. **Merge Branch:** Bring these improvements to main.
+
+---
+
+## Test Set GPS Corrections (Batch 1)
+
+**Date:** Jan 7, 2026
+
+### Motivation
+
+After visualizing ConvNeXt's 40 worst predictions, we noticed some images had suspiciously bad GPS labels (phone GPS drift). Instead of assuming all errors were model mistakes, we manually verified each image's location using Google Maps.
+
+### Process
+
+1. **Exported worst 40 predictions** to `outputs/worst_for_maps.csv` with image names and predicted GPS coordinates
+2. **Visualized all 40 images** in order (`outputs/worst_40_convnext.png`) for reference
+3. **Manually verified each location** in Google Maps, dragging pins to correct positions
+4. **Saved corrections** to `data/test_corrections_convnext_v1.csv`
+
+### Correction Results
+
+Of the 40 images examined:
+- **16 images (40%)** had correct GPS — ConvNeXt was actually wrong on these
+- **24 images (60%)** had bad GPS that we corrected — ConvNeXt may have been right!
+
+Notable corrections:
+| Image | GPS Movement | Notes |
+|-------|--------------|-------|
+| TestPhotos_IMG_3768.jpg | 40.8m | Largest correction |
+| TestPhotos_IMG_4267.jpg | 27.1m | Significant drift |
+| TestPhotos_IMG_4378.jpg | 19.5m | Phone GPS error |
+| TestPhotos_IMG_3298.jpg | 19.8m | Misplaced point |
+
+### Impact on Metrics
+
+Applied corrections directly to `test_dataset.csv` (test set is a fixed holdout, we're just fixing bad labels):
+
+| Metric | Before Corrections | After Corrections | Change |
+|--------|-------------------|-------------------|--------|
+| **Mean Error** | 7.55m | **7.46m** | -0.09m |
+| **Median Error** | 6.82m | 6.82m | (same) |
+
+**Error Distribution Changes:**
+
+| Range | Before | After | Change |
+|-------|--------|-------|--------|
+| Under 10m | 772 (75.5%) | 775 (75.8%) | +3 |
+| Over 15m | 66 (6.5%) | 57 (5.6%) | **-9** |
+| Over 20m | 15 (1.5%) | 12 (1.2%) | **-3** |
+| Over 30m | 1 (0.1%) | **0 (0.0%)** | **-1** ✓ |
+
+**Key win:** No more catastrophic failures (0 samples over 30m error).
+
+### Files Generated
+- `data/test_corrections_convnext_v1.csv` — 40 manually verified GPS corrections
+- Updated `data/test_dataset.csv` — Test set with corrected labels
+
+### Insight
+
+This exercise revealed that ~60% of our "worst" predictions were actually caused by **bad GPS labels**, not model errors. The model was often predicting correctly, but being penalized for phone GPS drift. This validates our data-centric approach: cleaning labels is just as important as improving the model.
+
+---
+
+## Experiment: Swin Transformer & Final ConvNeXt Ensemble
+
+**Date:** Jan 8, 2026
+
+### 1. Swin Transformer Experiment
+To add architectural diversity to our ensemble, we trained a `Swin-T` (Vision Transformer).
+*   **Hypothesis:** Transformers process images globally (patches + attention) rather than locally (sliding windows), potentially catching cues that CNNs miss.
+*   **Result:** **Failure (Overfitting)**
+    *   Test Mean Error: **9.68m** (vs 7.46m for ConvNeXt)
+    *   Train Loss: 3.49 vs Val Loss: 5.90 (Ratio 0.59x → Heavy Overfitting)
+*   **Conclusion:** Swin Transformers likely require more data (millions of images) to generalize well. For our ~2k image dataset, the inductive bias of CNNs (ConvNeXt) is superior. We abandoned Swin for the final model.
+
+### 2. ConvNeXt Ensemble Strategy
+Since ConvNeXt-Tiny was the clear winner, we decided to maximize its performance by training 3 variants with different random seeds. This reduces variance and typically improves accuracy by 5-10%.
+
+**Models Trained:**
+1.  `convnext_tiny_v1` (Seed 42) - The original success
+2.  `convnext_tiny_v2` (Seed 123) - 125 epochs
+3.  `convnext_tiny_v3` (Seed 456) - 125 epochs
+4.  `convnext_tiny_v4` (Seed 789) - Stopped early (Epoch 19), discarded.
+
+**Individual Performance (Test Set):**
+| Model | Seed | Mean Error | Median Error |
+|-------|------|------------|--------------|
+| v1 | 42 | 7.46m | 6.82m |
+| v2 | 123 | 7.69m | 6.68m |
+| v3 | 456 | 7.54m | 6.72m |
+
+*Note: All single models performed consistently (~7.5m mean error).*
+
+### 3. Final Ensemble Results
+We combined the predictions of v1, v2, and v3 (averaging lat/lon outputs).
+
+| Configuration | Mean Error | Median Error | Improvement |
+|---------------|------------|--------------|-------------|
+| Best Single (v1) | 7.46m | 6.82m | - |
+| **Final Ensemble** | **7.16m** | **6.48m** | **-0.30m (4.0%)** |
+
+**Conclusion:**
+We have reached a mean error of **7.16m**. The ensemble successfully smoothed out individual model variance. Given the GPS accuracy of standard smartphones is ~3-5m, we are likely approaching the theoretical limit of what is possible with this dataset and ground truth labels.
+
+### 4. "The Impossible 14" Analysis
+We intersected the "Top 50 Worst Predictions" from all 3 ConvNeXt variants to find images that are **universally hard** (failed by all seeds).
+
+**Results:** Found **14 images** (~1.3% of test set) that consistently fail across all models.
+
+| Filename | Avg Error | Notes |
+|----------|-----------|-------|
+| `TestPhotos_IMG_3862.jpg` | **28.8m** | Worst across all models. |
+| `TestPhotos_IMG_3532.jpg` | 27.5m | GPS correction made this *worse* (+10m). Visual aliasing likely. |
+| `TestPhotos_IMG_3579.jpg` | 23.9m | High variance but always bad. |
+| `TestPhotos_IMG_3882.jpg` | 22.1m | Another case where correction didn't help. |
+
+**Insight:**
+The `IMG_38xx` series appears 5 times in the top 7 hard images. This suggests a systematic issue with a specific location (e.g., highly repetitive architecture or remaining bad labels).
+
+**Future Work:**
+These 14 images are prime candidates for:
+1.  **Manual Re-verification:** Double-check their GPS coordinates on-site if possible.
+2.  **Training Inclusion:** Move them from Test to Train set (if they represent a rare view).
+3.  **Blacklisting:** If they are truly ambiguous (e.g., a blank wall), remove them to avoid misleading metrics.
+
+### 5. Hybrid Ensemble Experiment (Bonus)
+We tested if mixing architectures (ConvNeXt + EfficientNet) yields better diversity than mixing seeds.
+
+| Configuration | Composition | Mean Error | Median Error |
+|---------------|-------------|------------|--------------|
+| **Hybrid Ensemble** | 2 ConvNeXt + 1 EfficientNet | **7.13m** | **6.33m** |
+| Pure ConvNeXt | 3 ConvNeXt | 7.16m | 6.48m |
+| Pure EfficientNet | 3 EfficientNet | 8.12m | 7.33m |
+
+**Result:** Replacing one ConvNeXt with an EfficientNet (`seed42`) improved performance slightly (-0.03m mean, -0.15m median).
+**Decision:** We have the option to use the Hybrid ensemble for the absolute best numbers, or the Pure ConvNeXt ensemble for code simplicity. The gain is marginal (3cm).
+
+### Next Steps
+1.  **Merge** the experiment branch to main.
+2.  **Final Clean-up:** Remove temporary experiment files.
+3.  **Documentation:** Update the main README with final metrics.

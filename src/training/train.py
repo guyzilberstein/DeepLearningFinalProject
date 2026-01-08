@@ -29,7 +29,9 @@ def get_device_config():
     if torch.cuda.is_available():
         # GPU cluster - enable all optimizations
         device = torch.device("cuda")
-        batch_size = 32  # Larger batch for GPU
+        # ConvNeXt is heavier than B0. 
+        # 32 might OOM on 1080 Ti (11GB). 24 is safer, 16 is safest.
+        batch_size = 24  
         num_workers = 4  # Multi-process data loading
         pin_memory = True  # Faster CPU→GPU transfer
         use_amp = True  # Mixed precision for ~2x speedup
@@ -146,12 +148,11 @@ def train_model(num_epochs=25, batch_size=None, learning_rate=0.0001, experiment
     # Linear for large errors (noisy GPS), quadratic for small errors (fine-tuning)
     criterion = nn.HuberLoss(delta=1.0)
     
-    # Weight decay (L2 regularization) helps prevent overfitting
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
+    # Use AdamW instead of Adam for ConvNeXt
+    # AdamW separates weight decay from the gradient update. 
+    optimizer = optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1e-4)
     
     # Scheduler: Reduce LR by factor of 0.5 if val_loss doesn't improve for 7 epochs
-    # Changed from patience=3 to patience=7 to avoid premature LR reduction
-    # Changed factor from 0.1 to 0.5 for gentler reduction
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=7)
     
     # Mixed Precision Scaler (only used if use_amp=True)
