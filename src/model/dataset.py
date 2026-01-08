@@ -5,7 +5,7 @@ import pandas as pd
 import torchvision.transforms as transforms
 import os
 
-# Input resolution for EfficientNet-B0 (higher res for fine details)
+# Input resolution for ConvNeXt-Tiny (320x320 optimal for campus landmarks)
 INPUT_SIZE = 320
 
 class CampusDataset(Dataset):

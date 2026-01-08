@@ -62,12 +62,9 @@ def export_for_maps(num_worst: int = 25, experiment_name: str = "convnext_tiny_v
     if model_type == "convnext":
         from src.model.network import CampusLocator
         model = CampusLocator().to(device)
-    elif model_type == "swin":
-        from src.model.swin_network import CampusSwin
-        model = CampusSwin().to(device)
     else:  # efficientnet (legacy)
-        from src.model.network import CampusLocator
-        model = CampusLocator().to(device)
+        from src.model.efficientnet import EfficientNetLocator
+        model = EfficientNetLocator().to(device)
     
     checkpoint = torch.load(model_path, map_location=device)
     if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
@@ -139,8 +136,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Export worst predictions for Google Maps")
     parser.add_argument("--num", "-n", type=int, default=25, help="Number of worst predictions")
     parser.add_argument("--model", "-m", default="convnext_tiny_v1", help="Experiment name")
-    parser.add_argument("--type", "-t", default="convnext", choices=["convnext", "swin", "efficientnet"],
-                        help="Model type (convnext, swin, or efficientnet)")
+    parser.add_argument("--type", "-t", default="convnext", choices=["convnext", "efficientnet"],
+                        help="Model type (convnext or efficientnet)")
     args = parser.parse_args()
     
     export_for_maps(num_worst=args.num, experiment_name=args.model, model_type=args.type)

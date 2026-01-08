@@ -48,16 +48,9 @@ def evaluate_model(experiment_name="default"):
     
     model = CampusLocator().to(device)
     
-    # Handle both old format (state_dict only) and new format (dict with model_state_dict)
     checkpoint = torch.load(model_path, map_location=device)
-    if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
-        print(f"Loaded model with best_loss: {checkpoint.get('best_loss', 'N/A')}")
-        if 'experiment' in checkpoint:
-            print(f"Experiment name in checkpoint: {checkpoint['experiment']}")
-    else:
-        # Old format: checkpoint IS the state_dict
-        model.load_state_dict(checkpoint)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    print(f"Loaded model with best_loss: {checkpoint.get('best_loss', 'N/A')}")
     model.eval()
     
     # 4. Evaluation Loop
