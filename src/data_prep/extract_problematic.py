@@ -32,7 +32,7 @@ def extract_problematic_photos(experiment_name="b0_256_v3", error_threshold=20.0
     # Paths
     test_csv = os.path.join(project_root, 'data', 'test_dataset.csv')
     train_csv = os.path.join(project_root, 'data', 'dataset.csv')
-    img_dir = os.path.join(project_root, 'data', 'processed_images_320')
+    img_dir = os.path.join(project_root, 'data', 'images')
     metadata_dir = os.path.join(project_root, 'data', 'metadata_raw')
     
     checkpoint_filename = f'best_{experiment_name}.pth'

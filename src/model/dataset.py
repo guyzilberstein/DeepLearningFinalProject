@@ -5,7 +5,7 @@ import pandas as pd
 import torchvision.transforms as transforms
 import os
 
-# Input resolution for ConvNeXt-Tiny (320x320 optimal for campus landmarks)
+# Input resolution 
 INPUT_SIZE = 320
 
 class CampusDataset(Dataset):
@@ -20,22 +20,20 @@ class CampusDataset(Dataset):
         self.root_dir = root_dir
         
         if is_train:
-            # Training Pipeline with Advanced Augmentation
+            # Training Pipeline with Augmentation
             self.transform = transforms.Compose([
                 transforms.Resize((INPUT_SIZE, INPUT_SIZE)),
                 
-                # Slight rotation (±5°) - TA mentions "some variation in angle may occur"
+                # Slight rotation (±5°)
                 transforms.RandomRotation(degrees=5),
                 
                 # Gentle perspective (simulates phone tilt, not location change)
                 transforms.RandomPerspective(distortion_scale=0.2, p=0.5),
                 
-                # Photometric Augmentation (Lighting & color invariance)
-                # Wider hue range (0.1) simulates different times of day
+                # Photometric Augmentation (Lighting & color invariance), simulates different times of day
                 transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),
                 
                 # Night/Low-light Simulation (20% chance)
-                # Gentler than before: 40-70% brightness instead of 10-40%
                 transforms.RandomApply([
                     transforms.ColorJitter(brightness=(0.4, 0.7), contrast=(0.6, 0.9), saturation=0.2),
                 ], p=0.2),
@@ -77,11 +75,5 @@ class CampusDataset(Dataset):
         label_y = self.data_frame.iloc[idx]['y_meters']
         labels = torch.tensor([label_x, label_y], dtype=torch.float32)
         
-        # Weight (kept for compatibility, not currently used)
-        gps_accuracy = self.data_frame.iloc[idx].get('gps_accuracy_m', 10.0)
-        if pd.isna(gps_accuracy):
-            gps_accuracy = 10.0
-        sigma = max(float(gps_accuracy), 1.0)
-        weight = torch.tensor([1.0 / (sigma**2)], dtype=torch.float32)
-        
-        return image_tensor, labels, weight
+        # Return image and labels
+        return image_tensor, labels

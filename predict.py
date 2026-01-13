@@ -1,144 +1,166 @@
 """
-Campus GPS Prediction - Ensemble Model
-=======================================
-This script predicts GPS coordinates from a campus image using an ensemble
-of 3 models trained with different random seeds.
-
-Usage:
-    python predict.py <image_path>
-    
-Output:
-    Predicted latitude and longitude
+Project 4: Image-to-GPS Regression
+==================================
+Evaluation API Implementation.
 """
-import torch
-import sys
+
 import os
+import sys
+import torch
 import numpy as np
 from PIL import Image
 import torchvision.transforms as transforms
 
-# Add project root to path
-project_root = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, project_root)
+# --- CONFIGURATION ---
 
-from src.model.network import CampusLocator
-
-# Configuration
-INPUT_SIZE = 320
-MODEL_NAMES = [
-    'best_b0_320_seed42.pth',
-    'best_b0_320_seed123.pth', 
-    'best_b0_320_seed456.pth'
+# 1. Models to Load (ConvNeXt-Tiny Ensemble)
+MODEL_FILENAMES = [
+    'best_convnext_tiny_v1.pth',
+    'best_convnext_tiny_v2.pth',
+    'best_convnext_tiny_v3.pth'
 ]
 
-# Reference point for coordinate conversion (center of training data)
+INPUT_SIZE = 320
+
+# Reference point (Center of Campus)
 REF_LAT = 31.261976298245617
 REF_LON = 34.80279455555555
 METERS_PER_LAT = 111132.0
 METERS_PER_LON = 111132.0 * np.cos(np.radians(REF_LAT))
 
+# Global cache
+_MODELS = []
+_DEVICE = None
 
-def load_models(device):
-    """Load all ensemble models."""
-    models = []
+def get_device():
+    global _DEVICE
+    if _DEVICE is None:
+        _DEVICE = torch.device("cuda" if torch.cuda.is_available() 
+                             else "mps" if torch.backends.mps.is_available() 
+                             else "cpu")
+    return _DEVICE
+
+def load_models_cached():
+    """
+    Loads the ConvNeXt ensemble. 
+    Raises specific error if weights are missing (as they are external).
+    """
+    global _MODELS
+    if _MODELS:
+        return _MODELS
+
+    device = get_device()
+    project_root = os.path.dirname(os.path.abspath(__file__))
     checkpoint_dir = os.path.join(project_root, 'checkpoints')
     
-    for name in MODEL_NAMES:
-        model_path = os.path.join(checkpoint_dir, name)
-        if not os.path.exists(model_path):
-            print(f"Warning: {name} not found, skipping...")
+    # Ensure src is in path
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+    try:
+        from src.model.network import CampusLocator
+    except ImportError:
+        # Fallback for evaluation environments
+        sys.path.append(project_root)
+        from src.model.network import CampusLocator
+
+    loaded_models = []
+    missing_files = []
+
+    for name in MODEL_FILENAMES:
+        path = os.path.join(checkpoint_dir, name)
+        if not os.path.exists(path):
+            missing_files.append(name)
             continue
-            
-        model = CampusLocator().to(device)
-        checkpoint = torch.load(model_path, map_location=device)
         
+        # Initialize ConvNeXt Architecture
+        model = CampusLocator().to(device)
+        
+        # Load weights
+        checkpoint = torch.load(path, map_location=device)
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
             model.load_state_dict(checkpoint['model_state_dict'])
         else:
             model.load_state_dict(checkpoint)
         
         model.eval()
-        models.append(model)
+        loaded_models.append(model)
+
+    if missing_files:
+        error_msg = (
+            "\n" + "="*60 + "\n"
+            "CRITICAL ERROR: Model weights not found!\n"
+            "The following files are missing from the 'checkpoints/' directory:\n"
+            + "\n".join([f" - {f}" for f in missing_files]) + "\n\n"
+            "Please download them from the Google Drive link in 'checkpoints/README.md'\n"
+            "and place them in the 'checkpoints/' folder before running.\n"
+            + "="*60 + "\n"
+        )
+        raise FileNotFoundError(error_msg)
     
-    return models
+    _MODELS = loaded_models
+    return _MODELS
 
+def meters_to_latlon(x_meters, y_meters):
+    lat = REF_LAT + (y_meters / METERS_PER_LAT)
+    lon = REF_LON + (x_meters / METERS_PER_LON)
+    return lat, lon
 
-def preprocess_image(image_path):
-    """Load and preprocess an image for inference."""
+# --- REQUIRED API FUNCTION ---
+def predict_gps(image: np.ndarray) -> np.ndarray:
+    """
+    Predict GPS latitude and longitude from a single RGB image.
+    
+    Args:
+        image: numpy.ndarray of shape (H, W, 3) in RGB format, dtype=uint8
+        
+    Returns:
+        np.array([latitude, longitude], dtype=float32)
+    """
+    # 1. Setup
+    device = get_device()
+    models = load_models_cached()
+    
+    # 2. Preprocess
+    pil_img = Image.fromarray(image)
     transform = transforms.Compose([
         transforms.Resize((INPUT_SIZE, INPUT_SIZE)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                            std=[0.229, 0.224, 0.225])
     ])
+    img_tensor = transform(pil_img).unsqueeze(0).to(device)
     
-    image = Image.open(image_path).convert('RGB')
-    return transform(image).unsqueeze(0)  # Add batch dimension
-
-
-def meters_to_latlon(x_meters, y_meters):
-    """Convert meters offset to latitude/longitude."""
-    lat = REF_LAT + (y_meters / METERS_PER_LAT)
-    lon = REF_LON + (x_meters / METERS_PER_LON)
-    return lat, lon
-
-
-def predict(image_path):
-    """
-    Predict GPS coordinates for an image using ensemble of models.
-    
-    Args:
-        image_path: Path to the image file
-        
-    Returns:
-        (latitude, longitude) tuple
-    """
-    # Setup device
-    device = torch.device("cuda" if torch.cuda.is_available() 
-                         else "mps" if torch.backends.mps.is_available() 
-                         else "cpu")
-    
-    # Load models
-    models = load_models(device)
-    if len(models) == 0:
-        raise RuntimeError("No models found! Check checkpoints directory.")
-    
-    # Preprocess image
-    image_tensor = preprocess_image(image_path).to(device)
-    
-    # Get predictions from each model
+    # 3. Inference (Ensemble Average)
     predictions = []
     with torch.no_grad():
         for model in models:
-            output = model(image_tensor)
-            predictions.append(output.cpu().numpy()[0])  # [x_meters, y_meters]
+            output = model(img_tensor)
+            predictions.append(output.cpu().numpy()[0])
+            
+    avg_pred = np.mean(predictions, axis=0)
     
-    # Average predictions (ensemble)
-    ensemble_pred = np.mean(predictions, axis=0)
-    x_meters, y_meters = ensemble_pred[0], ensemble_pred[1]
+    # 4. Convert to Lat/Lon
+    lat, lon = meters_to_latlon(avg_pred[0], avg_pred[1])
     
-    # Convert to lat/lon
-    lat, lon = meters_to_latlon(x_meters, y_meters)
-    
-    return lat, lon
+    return np.array([lat, lon], dtype=np.float32)
 
-
+# --- CLI FOR MANUAL TESTING ---
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python predict.py <image_path>")
-        print("Example: python predict.py data/processed_images_320/LibraryArea_IMG_7288.jpg")
         sys.exit(1)
-    
-    image_path = sys.argv[1]
-    
-    if not os.path.exists(image_path):
-        print(f"Error: Image not found: {image_path}")
-        sys.exit(1)
-    
-    lat, lon = predict(image_path)
-    
-    print(f"Predicted Location:")
-    print(f"  Latitude:  {lat:.6f}")
-    print(f"  Longitude: {lon:.6f}")
-    print(f"  Google Maps: https://www.google.com/maps?q={lat},{lon}")
-
+        
+    path = sys.argv[1]
+    if os.path.exists(path):
+        # Emulate the API call with exact types
+        pil_image = Image.open(path).convert('RGB')
+        img_arr = np.array(pil_image, dtype=np.uint8)
+        
+        try:
+            result = predict_gps(img_arr)
+            # Only print the result array for testing purposes
+            print(result)
+        except FileNotFoundError as e:
+            print(e)
+            sys.exit(1)

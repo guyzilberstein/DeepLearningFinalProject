@@ -1,5 +1,0 @@
-WKT,filename,path,lat,lon,gps_accuracy_m,datetime,original_csv_file
-"POINT (34.8034178 31.2618215)",IMG_7866.HEIC,data/raw_photos/Bulding32Area/IMG_7866.HEIC,31.2618215,34.8034178,7.0,,data/metadata_raw/Bulding32Area.csv
-"POINT (34.8037377 31.2618181)",IMG_2589.HEIC,data/raw_photos/nightWithout26AndLibrary/IMG_2589.HEIC,31.2618181,34.8037377,7.0,,data/metadata_raw/nightWithout26AndLibrary.csv
-"POINT (34.8023207 31.2620788)",IMG_7146.HEIC,data/raw_photos/UnderBuilding26/IMG_7146.HEIC,31.2620788,34.8023207,7.0,,data/metadata_raw/UnderBuilding26.csv
-

@@ -22,7 +22,7 @@ def evaluate_model(experiment_name="default"):
     """
     # 1. Setup - Use test_dataset.csv (external test set)
     test_csv = os.path.join(project_root, 'data', 'test_dataset.csv')
-    img_dir = os.path.join(project_root, 'data', 'processed_images_320')
+    img_dir = os.path.join(project_root, 'data', 'images')
     
     # Checkpoint path based on experiment name
     checkpoint_filename = f'best_{experiment_name}.pth' if experiment_name != "default" else 'best_campus_locator.pth'
