@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="description" content="Campus Image-to-GPS Regression: A Deep Learning Approach for Absolute Localization">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Campus Image-to-GPS Localization</title>
+
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css?family=Noto+Sans:400,600,700&display=swap" rel="stylesheet">
+  
+  <!-- CSS -->
+  <link rel="stylesheet" href="./static/css/index.css">
+</head>
+<body>
+
+  <div class="container">
+    
+    <!-- Header -->
+    <header>
+      <h1 class="title">Campus Image-to-GPS Regression</h1>
+      
+      <div class="authors">
+        <span class="author-block">Student Name 1</span>
+        <span class="author-block">Student Name 2</span>
+      </div>
+
+      <div class="affiliation">
+        Introduction to Deep Learning - Final Project (2026)
+      </div>
+
+      <div class="publication-links">
+        <!-- Update links as needed -->
+        <span class="link-block">
+          <a href="#">
+            <span>📄 Paper</span>
+          </a>
+        </span>
+        <span class="link-block">
+          <a href="https://github.com/YOUR_USERNAME/YOUR_REPO">
+            <span>💻 Code</span>
+          </a>
+        </span>
+        <span class="link-block">
+          <a href="#">
+            <span>💾 Data</span>
+          </a>
+        </span>
+      </div>
+    </header>
+
+    <!-- Teaser -->
+    <section class="hero teaser">
+      <div class="figure">
+        <img src="./static/images/teaser.png" alt="Best Predictions Visualization">
+        <div class="caption">
+          Figure 1: <strong>High-Precision Localization.</strong> Our ConvNeXt-based ensemble predicts absolute GPS coordinates with a mean error of 7.16 meters. 
+          Green pins show ground truth, red pins show predictions. The system is robust to day/night variations and viewpoint changes.
+        </div>
+      </div>
+    </section>
+
+    <!-- Abstract -->
+    <section class="abstract">
+      <div class="abstract-container">
+        <h2 class="abstract-title">Abstract</h2>
+        <p>
+          We present a deep learning approach for predicting absolute GPS coordinates (latitude and longitude) from single monocular images of a university campus. 
+          The task is formulated as a regression problem, mapping visual features directly to geographic coordinates. 
+          We address key challenges including limited training data, extreme lighting variations (day vs. night), and visual ambiguity in repetitive architectural structures. 
+          Our proposed method utilizes a <strong>ConvNeXt-Tiny ensemble</strong> with a custom MLP regression head, trained using a robust Huber Loss and a novel 
+          <strong>"Night Simulation"</strong> augmentation strategy. We further employ an <strong>Active Learning</strong> loop to identify and incorporate 
+          "blind spot" locations into the training set. Our final ensemble model achieves a Mean Distance Error (MDE) of <strong>7.16 meters</strong> 
+          and a Median Error of 6.48 meters on a held-out test set, significantly outperforming ResNet and EfficientNet baselines and approaching the theoretical limit of consumer GPS accuracy.
+        </p>
+      </div>
+    </section>
+
+    <!-- Methodology -->
+    <section class="methodology">
+      <h2 class="title">Methodology</h2>
+      
+      <div class="figure">
+        <img src="./static/images/architecture.png" alt="Model Architecture">
+        <div class="caption">
+          Figure 2: <strong>System Architecture.</strong> We adopt a regression-based approach. The backbone (ConvNeXt-Tiny) extracts a 768-dimensional feature vector, 
+          which is processed by a custom MLP head (Linear → GELU → Dropout → Linear) to predict Cartesian coordinates (x, y) relative to a campus reference point.
+        </div>
+      </div>
+
+      <p>
+        <strong>Architecture:</strong> We chose ConvNeXt-Tiny for its large 7x7 kernels, which capture wider spatial context than standard CNNs (like EfficientNet's 3x3 kernels). 
+        This is crucial for distinguishing similar-looking corridors by recognizing distant landmarks.
+      </p>
+
+      <p>
+        <strong>Loss Function:</strong> We minimize Huber Loss (δ=1.0) instead of MSE. This makes training robust to outliers caused by noisy GPS labels (phone GPS drift), 
+        preventing the model from overfitting to "bad" ground truth.
+      </p>
+
+      <div class="figure">
+        <img src="./static/images/augmentation.png" alt="Data Augmentation">
+        <div class="caption">
+          Figure 3: <strong>Data Augmentation Pipeline.</strong> To handle limited data, we apply a diverse set of augmentations including random perspective changes (simulating phone tilt), 
+          color jittering, and random erasing.
+        </div>
+      </div>
+    </section>
+
+    <!-- Key Innovations -->
+    <section class="innovations">
+      <h2 class="title">Key Innovations</h2>
+      
+      <h3>1. Night Simulation</h3>
+      <p>
+        Night images initially accounted for 48% of our worst failures. We developed a tuned "Night Simulation" augmentation that randomly adjusts brightness (40-70%) 
+        and contrast to simulate low-light conditions without destroying structural information. This reduced catastrophic night failures (>50m error) by over 90%.
+      </p>
+
+      <h3>2. Active Learning Loop</h3>
+      <p>
+        We employed an iterative "human-in-the-loop" strategy. After training an initial model, we identified test samples with high error (>30m), labeled them as "Problematic Photos," 
+        and moved them to the training set. This effectively targeted the model's "blind spots" (e.g., specific unrepresented viewing angles).
+      </p>
+
+      <h3>3. Manual GPS Correction</h3>
+      <p>
+        We visually audited the 40 worst predictions and found that in 60% of cases, the model was actually <em>correct</em> and the ground truth GPS was drifted. 
+        We manually corrected these labels using satellite imagery, revealing the true performance of our model.
+      </p>
+    </section>
+
+    <!-- Results -->
+    <section class="results">
+      <h2 class="title">Results</h2>
+
+      <p>
+        Our final ensemble of 3 ConvNeXt-Tiny models achieves state-of-the-art performance for this task.
+      </p>
+
+      <div class="is-centered">
+        <table>
+          <thead>
+            <tr>
+              <th>Model</th>
+              <th>Mean Error</th>
+              <th>Median Error</th>
+              <th>Night Accuracy (<20m)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>ResNet-18 (Baseline)</td>
+              <td>29.25m</td>
+              <td>23.05m</td>
+              <td>-</td>
+            </tr>
+            <tr>
+              <td>EfficientNet-B0</td>
+              <td>11.94m</td>
+              <td>9.05m</td>
+              <td>59.3%</td>
+            </tr>
+            <tr>
+              <td><strong>ConvNeXt Ensemble (Final)</strong></td>
+              <td><strong>7.16m</strong></td>
+              <td><strong>6.48m</strong></td>
+              <td><strong>>96%</strong></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="figure">
+        <img src="./static/images/comparison.png" alt="Model Comparison Chart">
+        <div class="caption">
+          Figure 4: <strong>Performance Evolution.</strong> The progression of our mean error from the initial baseline to the final ensemble. 
+          Major drops correspond to the introduction of EfficientNet, Active Learning, and the ConvNeXt architecture.
+        </div>
+      </div>
+
+      <div class="figure">
+        <img src="./static/images/day_night.png" alt="Day vs Night Analysis">
+        <div class="caption">
+          Figure 5: <strong>Day vs. Night Performance.</strong> Our model generalizes remarkably well to night scenes despite being trained on a predominantly daytime dataset, 
+          thanks to our specialized augmentation strategy.
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Qualitative Analysis -->
+    <section class="qualitative">
+      <h2 class="title">Qualitative Analysis</h2>
+
+      <div class="figure">
+        <img src="./static/images/gradcam.png" alt="GradCAM Visualization">
+        <div class="caption">
+          Figure 6: <strong>What does the model see?</strong> GradCAM visualization reveals that the model focuses on distinctive skylines, building edges, and unique architectural features 
+          (like the specific window patterns of the library) rather than transient objects like people or cars.
+        </div>
+      </div>
+
+      <div class="figure">
+        <img src="./static/images/map_arrows.png" alt="Error Map Visualization">
+        <div class="caption">
+          Figure 7: <strong>Error Vectors.</strong> A map visualization of prediction errors. The arrows point from the true location to the predicted location. 
+          The shortness of the arrows demonstrates high precision across the entire campus area.
+        </div>
+      </div>
+    </section>
+
+    <!-- BibTeX -->
+    <section class="citation">
+      <h2 class="title">Citation</h2>
+      <pre class="bibtex">
+@article{campusgps2026,
+  title={Campus Image-to-GPS Regression: A Deep Learning Approach for Absolute Localization},
+  author={Student Name 1 and Student Name 2},
+  journal={Introduction to Deep Learning - Final Project},
+  year={2026}
+}</pre>
+    </section>
+
+    <footer>
+      <p>
+        This website template is adapted from the <a href="https://nerfies.github.io/">Nerfies</a> project page.
+      </p>
+    </footer>
+
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,185 @@
+/* Academic Project Page CSS */
+
+@import url('https://fonts.googleapis.com/css?family=Noto+Sans:400,600,700&display=swap');
+
+body {
+  font-family: 'Noto Sans', sans-serif;
+  font-weight: 400;
+  line-height: 1.6;
+  color: #333;
+  margin: 0;
+  padding: 0;
+  background-color: #fcfcfc;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+/* Header */
+header {
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+h1.title {
+  font-size: 2.5em;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: #111;
+  letter-spacing: -0.02em;
+}
+
+.authors {
+  font-size: 1.25em;
+  margin-bottom: 10px;
+}
+
+.author-block {
+  display: inline-block;
+  margin: 0 10px;
+}
+
+.affiliation {
+  font-size: 1.1em;
+  color: #666;
+  margin-bottom: 25px;
+}
+
+/* Buttons */
+.publication-links {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  margin-top: 20px;
+}
+
+.link-block a {
+  display: inline-flex;
+  align-items: center;
+  background-color: #363636;
+  color: #fff;
+  padding: 8px 18px;
+  border-radius: 24px;
+  text-decoration: none;
+  font-size: 0.95em;
+  font-weight: 600;
+  transition: background-color 0.2s ease;
+}
+
+.link-block a:hover {
+  background-color: #555;
+}
+
+/* Sections */
+section {
+  margin-bottom: 50px;
+}
+
+h2.title {
+  font-size: 1.75em;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 30px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 15px;
+  color: #222;
+}
+
+h3.title {
+    font-size: 1.4em;
+    font-weight: 600;
+    margin-top: 20px;
+    margin-bottom: 15px;
+    color: #333;
+}
+
+p {
+  font-size: 1.05em;
+  margin-bottom: 15px;
+  text-align: justify;
+}
+
+/* Abstract */
+.abstract-container {
+  background-color: #f5f5f5;
+  padding: 30px;
+  border-radius: 10px;
+  margin-bottom: 40px;
+}
+
+.abstract-title {
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 15px;
+  font-size: 1.5em;
+}
+
+/* Figures */
+.figure {
+  text-align: center;
+  margin: 40px 0;
+}
+
+.figure img {
+  max-width: 100%;
+  border-radius: 5px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  margin-bottom: 15px;
+}
+
+.caption {
+  font-size: 0.95em;
+  color: #666;
+  font-style: italic;
+  margin-top: 10px;
+  text-align: center;
+}
+
+.is-centered {
+    text-align: center;
+}
+
+/* Tables */
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 20px 0;
+}
+
+table, th, td {
+    border: 1px solid #ddd;
+}
+
+th, td {
+    padding: 12px;
+    text-align: center;
+}
+
+th {
+    background-color: #f2f2f2;
+    font-weight: 600;
+}
+
+/* BibTeX */
+pre.bibtex {
+  background-color: #f5f5f5;
+  padding: 20px;
+  border-radius: 5px;
+  font-size: 0.9em;
+  overflow-x: auto;
+  font-family: 'Courier New', monospace;
+  border: 1px solid #e1e1e1;
+}
+
+/* Footer */
+footer {
+    text-align: center;
+    padding: 40px 0;
+    font-size: 0.9em;
+    color: #888;
+    border-top: 1px solid #eee;
+    margin-top: 60px;
+}
