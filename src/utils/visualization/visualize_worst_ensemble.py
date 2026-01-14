@@ -1,8 +1,9 @@
 """
-Visualize worst 25 ensemble predictions on test set.
+Visualize worst 25 ensemble predictions on external test set.
+Uses test_dataset.csv (1,023 samples from TestPhotos).
 """
 import torch
-from torch.utils.data import DataLoader, Subset
+from torch.utils.data import DataLoader
 import numpy as np
 import os
 import matplotlib.pyplot as plt
@@ -45,25 +46,25 @@ def load_model(model_path, device):
     return model
 
 def visualize_worst_ensemble(num_worst=25):
-    # Setup
-    csv_file = os.path.join(project_root, 'data', 'dataset.csv')
+    # Setup - use external test set
+    test_csv = os.path.join(project_root, 'data', 'test_dataset.csv')
+    train_csv = os.path.join(project_root, 'data', 'dataset.csv')
     img_dir = os.path.join(project_root, 'data', 'images')
     checkpoint_dir = os.path.join(project_root, 'checkpoints')
-    indices_path = os.path.join(project_root, 'outputs', 'test_indices.npy')
     output_plot = os.path.join(project_root, 'outputs', 'worst_ensemble_visualization.png')
     
-    model_names = ['b0_320_seed42', 'b0_320_seed123', 'b0_320_seed456']
+    model_names = ['convnext_tiny_v1', 'convnext_tiny_v2', 'convnext_tiny_v3']
     
-    # Load reference point
-    df_full = pd.read_csv(csv_file)
-    ref_lat = df_full['lat'].mean()
-    ref_lon = df_full['lon'].mean()
+    # Load reference point from training set (same as used during training)
+    df_train = pd.read_csv(train_csv)
+    ref_lat = df_train['lat'].mean()
+    ref_lon = df_train['lon'].mean()
     
-    # Load data
-    full_dataset = CampusDataset(csv_file=csv_file, root_dir=img_dir)
-    test_indices = np.load(indices_path)
-    test_dataset = Subset(full_dataset, test_indices)
+    # Load external test set
+    test_dataset = CampusDataset(csv_file=test_csv, root_dir=img_dir, is_train=False)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    
+    print(f"Loaded external test set: {len(test_dataset)} samples")
     
     # Load models
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -76,38 +77,39 @@ def visualize_worst_ensemble(num_worst=25):
             models.append(load_model(model_path, device))
             print(f"Loaded {name}")
     
-    # Run inference
-    all_individual_preds = {i: [] for i in range(len(models))}
+    # Run ensemble inference
+    all_preds = []
     all_labels = []
-    all_indices = []
     
     print("Running ensemble inference...")
-    current_idx = 0
     with torch.no_grad():
-        for inputs, labels, _ in test_loader:
+        for batch in test_loader:
+            if len(batch) == 3:
+                inputs, labels, _ = batch
+            else:
+                inputs, labels = batch
             inputs = inputs.to(device)
-            batch_size = inputs.size(0)
-            batch_indices = test_indices[current_idx:current_idx + batch_size]
-            current_idx += batch_size
             
-            for i, model in enumerate(models):
+            # Get ensemble prediction (average of all models)
+            model_outputs = []
+            for model in models:
                 outputs = model(inputs)
-                all_individual_preds[i].append(outputs.cpu().numpy())
+                model_outputs.append(outputs.cpu().numpy())
             
+            ensemble_pred = np.mean(model_outputs, axis=0)
+            all_preds.append(ensemble_pred)
             all_labels.append(labels.numpy())
-            all_indices.extend(batch_indices)
     
     # Stack predictions
-    for i in range(len(models)):
-        all_individual_preds[i] = np.vstack(all_individual_preds[i])
+    all_preds = np.vstack(all_preds)
     all_labels = np.vstack(all_labels)
-    all_indices = np.array(all_indices)
     
-    # Calculate ensemble predictions
-    ensemble_preds = np.mean([all_individual_preds[i] for i in range(len(models))], axis=0)
+    # Get image names from test dataset
+    all_img_names = test_dataset.data_frame['filename'].tolist()
+    all_sources = test_dataset.data_frame.get('source_file', pd.Series(['Unknown'] * len(test_dataset))).tolist()
     
     # Calculate errors
-    ensemble_errors = np.linalg.norm(ensemble_preds - all_labels, axis=1)
+    ensemble_errors = np.linalg.norm(all_preds - all_labels, axis=1)
     
     # Select worst samples
     sorted_idxs = np.argsort(ensemble_errors)
@@ -120,23 +122,23 @@ def visualize_worst_ensemble(num_worst=25):
     fig = plt.figure(figsize=(25, 30))
     gs = gridspec.GridSpec(rows * 2, cols, height_ratios=[3, 2] * rows)
     
-    print(f"Plotting {num_worst} worst ensemble predictions...")
+    print(f"\nPlotting {num_worst} worst ensemble predictions...")
     print("\n" + "="*80)
-    print("WORST 25 ENSEMBLE PREDICTIONS (sorted by error)")
+    print(f"WORST {num_worst} ENSEMBLE PREDICTIONS (sorted by error)")
+    print(f"Test Set: {len(test_dataset)} samples | Mean: {ensemble_errors.mean():.2f}m | Median: {np.median(ensemble_errors):.2f}m")
     print("="*80)
     
-    for i, idx_local in enumerate(worst_idxs):
+    for i, idx in enumerate(worst_idxs):
         row = (i // cols) * 2
         col = i % cols
         
-        idx_global = all_indices[idx_local]
-        ensemble_pred = ensemble_preds[idx_local]
-        true_local = all_labels[idx_local]
-        error_m = ensemble_errors[idx_local]
+        ensemble_pred = all_preds[idx]
+        true_local = all_labels[idx]
+        error_m = ensemble_errors[idx]
         
         # Get image info
-        img_name = full_dataset.data_frame.iloc[idx_global]['filename']
-        source_file = full_dataset.data_frame.iloc[idx_global].get('source_file', 'Unknown')
+        img_name = all_img_names[idx]
+        source_file = all_sources[idx] if idx < len(all_sources) else 'Unknown'
         img_path = os.path.join(img_dir, img_name)
         
         # Print to console

@@ -108,7 +108,11 @@ def ensemble_evaluate(model_names=None):
     individual_preds = {i: [] for i in range(len(models))}
     
     with torch.no_grad():
-        for inputs, labels, _ in test_loader:
+        for batch in test_loader:
+            if len(batch) == 3:
+                inputs, labels, _ = batch
+            else:
+                inputs, labels = batch
             inputs = inputs.to(device)
             
             # Get predictions from each model
