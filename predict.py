@@ -22,7 +22,7 @@ MODEL_FILENAMES = [
 
 INPUT_SIZE = 320
 
-# Reference point (Center of Campus)
+# Reference point (Center of Area)
 REF_LAT = 31.261976298245617
 REF_LON = 34.80279455555555
 METERS_PER_LAT = 111132.0

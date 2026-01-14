@@ -11,7 +11,8 @@
 3. [Model Architecture](#model-architecture)
 4. [Training Configuration](#training-configuration)
 5. [Evaluation](#evaluation)
-6. [File Reference](#file-reference)
+6. [Visualizations](#visualizations)
+7. [File Reference](#file-reference)
 
 ---
 
@@ -22,25 +23,29 @@ This section explains the purpose of each folder and key file in the repository.
 ```
 DeepLearningFinalProject/
 ├── data/
-│   ├── images/                   # Resized 320x320 JPGs (Ready for training/inference)
+│   ├── images/                   # Resized 320x320 JPGs (3,327 images)
 │   ├── gt.csv                    # Ground Truth for evaluation (Required by API)
 │   ├── dataset.csv               # Training pool metadata (~2,200 samples)
-│   ├── test_dataset.csv          # External test set metadata
-│   └── metadata/                 # Internal metadata & logs
-│       ├── raw/                  # Per-folder raw EXIF data
-│       ├── corrections/          # Manual GPS correction batches
-│       ├── night_holdout.csv     # Night evaluation set
+│   ├── test_dataset.csv          # External test set metadata (~1,023 samples)
+│   └── metadata/
+│       ├── raw/                  # Per-folder raw EXIF data (13 CSVs)
+│       ├── corrections/          # Manual GPS correction batches (5 CSVs)
+│       ├── night_holdout.csv     # Night evaluation set (54 samples)
 │       └── reference_coords.json # Lat/Lon to Meter conversion reference
 ├── src/
 │   ├── data_prep/                # Scripts for processing raw data
 │   ├── model/                    # Neural network architecture & dataset classes
-│   ├── training/                 # Training loops and model saving
-│   └── utils/                    # Helper scripts
-│       ├── visualization/        # Visualization scripts
-│       ├── evaluation/           # Evaluation scripts
-│       └── data/                 # Data processing scripts
-├── checkpoints/                  # Trained model weights (must be downloaded)
+│   ├── training/                 # Training loops and evaluation
+│   └── utils/
+│       ├── visualization/        # 8 visualization scripts
+│       ├── evaluation/           # Ensemble and night evaluation
+│       └── data/                 # Data processing and correction
+├── checkpoints/                  # Trained model weights (3 ConvNeXt-Tiny models)
+│   ├── best_convnext_tiny_v1.pth
+│   ├── best_convnext_tiny_v2.pth
+│   └── best_convnext_tiny_v3.pth
 ├── predict.py                    # Main Inference API (Required submission file)
+├── requirements.txt              # Python dependencies
 └── project_journal.md            # Development log
 ```
 
@@ -50,7 +55,7 @@ DeepLearningFinalProject/
 
 ### Overview
 ```
-Raw HEIC Photos → Extract Metadata → Convert to JPG → Normalize Coordinates → Train/Test Split
+Raw HEIC Photos → Extract Metadata → Convert to JPG → Normalize Coordinates → Train/Val Split
 ```
 
 ### Step 1: Extract Metadata
@@ -66,7 +71,7 @@ python src/data_prep/extract_metadata.py
 python src/data_prep/extract_metadata.py --folders NewFolder1 NewFolder2
 ```
 
-**Output**: One CSV per folder in `data/metadata_raw/` with columns:
+**Output**: One CSV per folder in `data/metadata/raw/` with columns:
 - `filename`, `path`, `datetime`, `lat`, `lon`, `gps_accuracy_m`
 
 ---
@@ -91,10 +96,10 @@ python src/data_prep/convert_images.py
 **Script**: `src/data_prep/normalize_coords.py`
 
 Core preprocessing script that:
-1. Loads all metadata CSVs
+1. Loads all metadata CSVs from `data/metadata/raw/`
 2. Calculates reference point (campus center)
 3. Converts lat/lon to local (x, y) meters
-4. **Automatically applies corrections** from `corrections_batch*.csv`
+4. **Automatically applies corrections** from `data/metadata/corrections/`
 5. Splits data into train/test/night-holdout
 
 ```bash
@@ -105,9 +110,9 @@ python src/data_prep/normalize_coords.py
 | File | Purpose |
 |------|---------|
 | `dataset.csv` | Training pool (~2,200 samples) |
-| `test_dataset.csv` | External test set (~1,000 samples) |
-| `night_holdout.csv` | 10% of night photos for low-light evaluation |
-| `reference_coords.json` | Reference lat/lon for inference |
+| `test_dataset.csv` | External test set (~1,023 samples) |
+| `metadata/night_holdout.csv` | 54 night photos for low-light evaluation |
+| `metadata/reference_coords.json` | Reference lat/lon for inference |
 
 **Coordinate System**:
 - `x_meters`: East-West offset from reference (positive = East)
@@ -117,18 +122,18 @@ python src/data_prep/normalize_coords.py
 
 ### GPS Correction Workflow
 
-For manually correcting inaccurate GPS labels:
+For manually correcting inaccurate GPS labels (used for worst predictions with potentially incorrect labels):
 
 1. **Export worst predictions** for review:
    ```bash
-   python src/utils/export_worst_for_audit.py --num 25
+   python src/utils/data/export_worst_for_correction.py --num 25
    ```
 
 2. **Import to Google My Maps** → Drag points to correct locations → Export
 
 3. **Convert back to corrections format**:
    ```bash
-   python src/utils/import_corrections.py exported.csv --output data/corrections_batch5.csv
+   python src/utils/data/import_corrections.py exported.csv --output data/metadata/corrections/corrections_batch5.csv
    ```
 
 4. **Regenerate dataset** (corrections are auto-applied):
@@ -203,7 +208,7 @@ Linear(128 → 2)  →  [x_meters, y_meters]
 | Dataset | Size | Purpose |
 |---------|------|---------|
 | `test_dataset.csv` | 1,023 | Primary evaluation (photos from all locations) |
-| `night_holdout.csv` | 54 | Low-light performance evaluation |
+| `metadata/night_holdout.csv` | 54 | Low-light performance evaluation |
 
 ### Scripts
 
@@ -214,13 +219,12 @@ python src/training/evaluate.py convnext_tiny_v1
 
 **Evaluate ensemble (3 models)**:
 ```bash
-# Automatically loads v1, v2, v3
 python src/utils/evaluation/ensemble_evaluate.py convnext_tiny_v1 convnext_tiny_v2 convnext_tiny_v3
 ```
 
-**Visualize Worst Predictions**:
+**Evaluate night performance**:
 ```bash
-python src/utils/visualization/visualize_worst.py --experiment convnext_tiny_v1
+python src/utils/evaluation/evaluate_night.py
 ```
 
 ### Ensemble Strategy
@@ -235,9 +239,22 @@ Model 3 (seed=456) ──┘
 
 ---
 
-## Final Model Performance
+## Visualizations
 
-Detailed results and analysis are provided in the accompanying project report.
+Visualization scripts generate figures to `outputs/` (gitignored). Run any script to regenerate visualizations locally.
+
+### Scripts (`src/utils/visualization/`)
+
+| Script | Description |
+|--------|-------------|
+| `visualize_error_distribution.py` | Histogram of prediction errors with percentile markers |
+| `visualize_model_comparison.py` | Compare single models vs ensemble performance |
+| `visualize_day_with_maps.py` | Day predictions overlaid on campus map |
+| `visualize_night_with_maps.py` | Night predictions overlaid on campus map |
+| `visualize_ensemble.py` | Ensemble vs single model comparison |
+| `visualize_worst.py` | Worst predictions grid for a single model |
+| `visualize_worst_ensemble.py` | Worst predictions for the ensemble |
+| `visualize_augmentations.py` | Preview data augmentation pipeline |
 
 ---
 
@@ -271,8 +288,13 @@ Detailed results and analysis are provided in the accompanying project report.
 #### Visualization (`src/utils/visualization/`)
 | File | Purpose |
 |------|---------|
-| `visualize_worst.py` | Plot 25 worst predictions with maps |
-| `visualize_ensemble.py` | Visualize ensemble predictions |
+| `visualize_error_distribution.py` | Error histogram with statistics |
+| `visualize_model_comparison.py` | Compare model performance |
+| `visualize_day_with_maps.py` | Day predictions on campus map |
+| `visualize_night_with_maps.py` | Night predictions on campus map |
+| `visualize_ensemble.py` | Ensemble vs single model analysis |
+| `visualize_worst.py` | Plot worst predictions for single model |
+| `visualize_worst_ensemble.py` | Plot worst predictions for ensemble |
 | `visualize_augmentations.py` | Preview data augmentations |
 
 #### Evaluation (`src/utils/evaluation/`)
@@ -284,8 +306,7 @@ Detailed results and analysis are provided in the accompanying project report.
 #### Data (`src/utils/data/`)
 | File | Purpose |
 |------|---------|
-| `export_worst_for_audit.py` | Export worst predictions for GPS correction |
+| `export_worst_for_correction.py` | Export worst predictions for GPS correction |
 | `analyze_hardest_samples.py` | Find intersection of failures across models |
 | `import_corrections.py` | Convert corrected coords to batch format |
-| `generate_gt_csv.py` | Generate ground truth CSV |
-
+| `generate_gt_csv.py` | Generate ground truth CSV for submission |

@@ -1,24 +1,37 @@
-# Project 4: Image-to-GPS Regression
+# Campus Image-to-GPS Localization
 
 ## Overview
-This repository contains the solution for **Project 4: Image-to-GPS Regression**.
-The model predicts exact GPS coordinates from campus photos.
+This repository contains a deep learning solution for **Image-to-GPS Regression**. The goal is to predict the precise real-world location (Latitude, Longitude) of a photo taken within a predefined area of the university campus, using only visual features.
 
 **Method:**
 - **Model:** ConvNeXt-Tiny Ensemble (3 models)
 - **Architecture:** ConvNeXt backbone with custom MLP regression head
 - **Training:** Trained on 320x320 inputs with robust augmentation (Night simulation, rotation, perspective)
+- **Loss:** Huber Loss (robust to outliers/noisy GPS labels)
 
 ## Setup
 
-1. **Install Dependencies:**
+**Python Version:** 3.9+ recommended (tested on 3.9, 3.10)
+
+1. **Create Environment:**
+   ```bash
+   # Using venv
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   
+   # Or using Conda
+   conda create -n campus-gps python=3.10
+   conda activate campus-gps
+   ```
+
+2. **Install Dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
 
-2. **Download Model Weights:**
+3. **Download Model Weights:**
    Due to file size limits, the trained models are hosted externally.
-   - Read `checkpoints/README.md` for the download link.
+   - See **[Checkpoints README](checkpoints/README.md)** for the download link.
    - Place `best_convnext_tiny_v1.pth`, `best_convnext_tiny_v2.pth`, and `best_convnext_tiny_v3.pth` in the `checkpoints/` folder.
 
 ## Usage
@@ -49,5 +62,5 @@ python predict.py data/images/LibraryArea_IMG_8164.jpg
 - `data/gt.csv`: Ground truth file (`image_name`, `Latitude`, `Longitude`).
 
 ## Documentation
-- `REPO_GUIDE.md`: Deep dive into the codebase structure, technical implementation, and file purposes.
-- `data/README.md`: Dataset collection, raw photo download links, and processing details.
+- **[Repository Guide](REPO_GUIDE.md)**: Deep dive into the codebase structure, technical implementation, and file purposes.
+- **[Data README](data/README.md)**: Dataset collection, raw photo download links, and processing details.
