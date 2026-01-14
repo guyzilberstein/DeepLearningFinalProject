@@ -3,6 +3,26 @@ __pycache__/
 *.pyc
 outputs/
 
+# Python Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+.env/
+*.egg-info/
+dist/
+build/
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Log files and temporary results
+*.log
+*_results.txt
+eval_*.txt
+convnext_*.txt
+
 # Raw photos stored on Google Drive (too large for git)
 data/raw_photos/
 
