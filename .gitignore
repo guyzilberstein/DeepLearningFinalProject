@@ -41,3 +41,16 @@ checkpoints/best_b0_ensemble_*.pth
 checkpoints/best_b3_*.pth
 checkpoints/best_v2s_*.pth
 checkpoints/best_campus_locator.pth
+
+# LaTeX auxiliary files
+*.aux
+*.log
+*.out
+*.toc
+*.lof
+*.lot
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
