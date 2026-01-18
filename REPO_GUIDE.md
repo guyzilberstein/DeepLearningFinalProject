@@ -37,16 +37,19 @@ DeepLearningFinalProject/
 │   ├── model/                    # Neural network architecture & dataset classes
 │   ├── training/                 # Training loops and evaluation
 │   └── utils/
-│       ├── visualization/        # 8 visualization scripts
+│       ├── visualization/        # visualization scripts
 │       ├── evaluation/           # Ensemble and night evaluation
 │       └── data/                 # Data processing and correction
 ├── checkpoints/                  # Trained model weights (3 ConvNeXt-Tiny models)
 │   ├── best_convnext_tiny_v1.pth
 │   ├── best_convnext_tiny_v2.pth
 │   └── best_convnext_tiny_v3.pth
+├── docs/                         # Project website (GitHub Pages)
+├── report_figures/               # High-quality figures for the LaTeX report
 ├── predict.py                    # Main Inference API (Required submission file)
-├── requirements.txt              # Python dependencies
-└── project_journal.md            # Development log
+├── FINAL_REPORT.tex              # LaTeX source for the report
+├── FINAL_REPORT.pdf              # Compiled PDF report
+└── requirements.txt              # Python dependencies
 ```
 
 ---

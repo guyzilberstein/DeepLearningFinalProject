@@ -18,61 +18,98 @@
     
     <!-- Header -->
     <header>
+      <div class="header-logo">
+        <img src="./static/images/location_pin_icon.jpg" alt="Logo" class="logo-icon">
+      </div>
       <h1 class="title">Campus Image-to-GPS Regression</h1>
+      <p class="subtitle">Deep Learning for Visual Localization</p>
       
       <div class="authors">
-        <span class="author-block">Student Name 1</span>
-        <span class="author-block">Student Name 2</span>
+        <span class="author-block">Guy Stein</span>
+        <span class="author-block">Yotam Tsur</span>
+        <span class="author-block">Guy Zilberstein</span>
       </div>
 
       <div class="affiliation">
-        Introduction to Deep Learning - Final Project (2026)
+        Introduction to Deep Learning - Final Project (January 2026)
       </div>
 
       <div class="publication-links">
-        <!-- Update links as needed -->
         <span class="link-block">
-          <a href="#">
+          <a href="./FINAL_REPORT.pdf" target="_blank">
             <span>📄 Paper</span>
           </a>
         </span>
         <span class="link-block">
-          <a href="https://github.com/YOUR_USERNAME/YOUR_REPO">
+          <a href="https://github.com/guyzilberstein/DeepLearningFinalProject" target="_blank">
             <span>💻 Code</span>
-          </a>
-        </span>
-        <span class="link-block">
-          <a href="#">
-            <span>💾 Data</span>
           </a>
         </span>
       </div>
     </header>
 
-    <!-- Teaser -->
-    <section class="hero teaser">
-      <div class="figure">
-        <img src="./static/images/teaser.png" alt="Best Predictions Visualization">
-        <div class="caption">
-          Figure 1: <strong>High-Precision Localization.</strong> Our ConvNeXt-based ensemble predicts absolute GPS coordinates with a mean error of 7.16 meters. 
-          Green pins show ground truth, red pins show predictions. The system is robust to day/night variations and viewpoint changes.
-        </div>
-      </div>
-    </section>
-
     <!-- Abstract -->
     <section class="abstract">
-      <div class="abstract-container">
-        <h2 class="abstract-title">Abstract</h2>
-        <p>
-          We present a deep learning approach for predicting absolute GPS coordinates (latitude and longitude) from single monocular images of a university campus. 
-          The task is formulated as a regression problem, mapping visual features directly to geographic coordinates. 
-          We address key challenges including limited training data, extreme lighting variations (day vs. night), and visual ambiguity in repetitive architectural structures. 
-          Our proposed method utilizes a <strong>ConvNeXt-Tiny ensemble</strong> with a custom MLP regression head, trained using a robust Huber Loss and a novel 
-          <strong>"Night Simulation"</strong> augmentation strategy. We further employ an <strong>Active Learning</strong> loop to identify and incorporate 
-          "blind spot" locations into the training set. Our final ensemble model achieves a Mean Distance Error (MDE) of <strong>7.16 meters</strong> 
-          and a Median Error of 6.48 meters on a held-out test set, significantly outperforming ResNet and EfficientNet baselines and approaching the theoretical limit of consumer GPS accuracy.
-        </p>
+      <h2 class="abstract-title">Abstract</h2>
+      <p>
+        This project presents a deep learning approach for predicting absolute GPS coordinates (latitude and longitude) from single images 
+        of a university campus. The task is formulated as a regression problem, mapping visual features directly to geographic coordinates. 
+        We address key challenges including <strong>mobile phone GPS accuracy errors</strong>, <strong>lighting variations</strong> across different 
+        times of day, and <strong>visual ambiguity</strong> in repetitive architectural structures. Our method utilizes a 
+        <strong>ConvNeXt-Tiny ensemble</strong> with a custom MLP regression head, trained using robust Huber Loss and a comprehensive 
+        data augmentation strategy. We further employ an <strong>Active Learning</strong> loop to identify and incorporate "blind spot" 
+        locations into the training set. Our final ensemble achieves a Mean Distance Error of <strong>7.16 meters</strong> and Median Error 
+        of <strong>6.48 meters</strong> on a held-out test set of 1,023 images, achieving a <strong>75% improvement</strong> over the ResNet-18 baseline.
+      </p>
+    </section>
+
+    <!-- Introduction -->
+    <section class="introduction">
+      <h2 class="title">The Challenge</h2>
+      
+      <div class="section-hero-image">
+        <img src="./static/images/campus_ai_fusion.jpg" alt="Campus with AI Neural Network Overlay">
+      </div>
+      
+      <p>
+        Localization is a fundamental capability for autonomous navigation and location-based services. While GPS provides an extensive solution, 
+        it suffers from signal degradation in urban canyons or indoors. <strong>Visual localization</strong>, determining location from images, offers 
+        a complementary approach. Unlike retrieval-based methods that require a database of geo-tagged images at inference time, our approach 
+        regresses coordinates directly using a neural network, offering a compact and fast solution.
+      </p>
+      <p>
+        The primary challenges we faced include:
+      </p>
+      <ul>
+        <li><strong>Dataset Creation:</strong> We built a dataset from scratch (~3,300 images), requiring careful consideration of capture strategies, 
+        photographing at different times of day, and finding the right balance between dataset size and quality.</li>
+        <li><strong>Visual Ambiguity:</strong> The campus features repetitive architecture (similar-looking corridors and walkways), making distinct localization difficult.</li>
+        <li><strong>Lighting Conditions:</strong> The model must generalize across different times of day, particularly challenging night scenes where visual information is reduced.</li>
+        <li><strong>Label Noise:</strong> Ground truth GPS coordinates from smartphones have inherent errors (drift) of 3-10 meters.</li>
+      </ul>
+    </section>
+
+    <!-- Prediction Examples -->
+    <section class="hero teaser">
+      <p class="teaser-intro">
+        Here are examples of <strong>best</strong>, <strong>medium</strong>, and <strong>worst</strong> predictions on an external test set. 
+        Green markers show actual GPS locations, red markers show predicted locations.
+      </p>
+      
+      <div class="figure full-width">
+        <img src="./static/images/day_predictions_analysis.png" alt="Day Predictions Analysis">
+        <div class="caption">
+          Figure 1: <strong>Daytime Test Set Results.</strong> Mean Error: 7.16m | Median: 6.48m | 1023 samples. 
+          Top row shows best predictions (sub-meter accuracy), middle row shows median performance, bottom row shows challenging cases.
+        </div>
+      </div>
+
+      <div class="figure full-width">
+        <img src="./static/images/night_predictions_analysis.png" alt="Night Predictions Analysis">
+        <div class="caption">
+          Figure 2: <strong>Night Test Set Results.</strong> Mean Error: 7.05m | Median: 5.25m | 54 samples. 
+          The model generalizes well to low-light conditions thanks to our Night Simulation augmentation strategy.
+        </div>
       </div>
     </section>
 
@@ -80,29 +117,53 @@
     <section class="methodology">
       <h2 class="title">Methodology</h2>
       
+      <div class="section-hero-image">
+        <img src="./static/images/deep_learning_pipeline.jpg" alt="Deep Learning Pipeline Visualization">
+      </div>
+      
       <div class="figure">
         <img src="./static/images/architecture.png" alt="Model Architecture">
         <div class="caption">
-          Figure 2: <strong>System Architecture.</strong> We adopt a regression-based approach. The backbone (ConvNeXt-Tiny) extracts a 768-dimensional feature vector, 
+          Figure 3: <strong>System Architecture.</strong> The backbone (ConvNeXt-Tiny) extracts a 768-dimensional feature vector, 
           which is processed by a custom MLP head (Linear → GELU → Dropout → Linear) to predict Cartesian coordinates (x, y) relative to a campus reference point.
         </div>
       </div>
 
+      <h3>Coordinate Representation</h3>
       <p>
-        <strong>Architecture:</strong> We chose ConvNeXt-Tiny for its large 7x7 kernels, which capture wider spatial context than standard CNNs (like EfficientNet's 3x3 kernels). 
-        This is crucial for distinguishing similar-looking corridors by recognizing distant landmarks.
+        The model predicts coordinates in a <strong>local Cartesian system</strong> (x_meters, y_meters) relative to a reference point, rather than raw GPS values. 
+        This normalization is critical because neural networks struggle to regress high-precision numbers like raw GPS coordinates (e.g., Lat 31.26201). 
+        The predicted meters are then converted back to absolute GPS coordinates using standard geodetic equations.
       </p>
 
+      <h3>Architecture Choice</h3>
       <p>
-        <strong>Loss Function:</strong> We minimize Huber Loss (δ=1.0) instead of MSE. This makes training robust to outliers caused by noisy GPS labels (phone GPS drift), 
-        preventing the model from overfitting to "bad" ground truth.
+        We chose <strong>ConvNeXt-Tiny</strong> after extensive experimentation with ResNet-18, EfficientNet (B0, B3, V2-S), and Swin Transformers. 
+        ConvNeXt's large 7×7 kernels capture wider spatial context than standard 3×3 kernels, which is crucial for localization where relative landmark positions matter. 
+        Interestingly, the Vision Transformer (Swin-T) underperformed despite having similar parameter count, suggesting that CNN inductive biases 
+        (locality, translation invariance) are more data-efficient for our ~2,000 training samples.
+      </p>
+
+      <h3>Loss Function</h3>
+      <p>
+        We minimize <strong>Huber Loss (δ=1.0)</strong> instead of MSE. For small errors, it behaves like MSE (quadratic), providing strong gradients for precise learning. 
+        For large errors, it becomes linear like MAE, preventing outliers from dominating the gradient. This is critical for our dataset: despite extensive manual auditing, 
+        some training images inevitably retain incorrect GPS labels. With MSE, a single mislabeled sample with a 30m error would generate a disproportionately large gradient, 
+        forcing the model to overfit to that outlier. Huber Loss dampens this effect.
+      </p>
+
+      <h3>Training Details</h3>
+      <p>
+        We use <strong>AdamW</strong> optimizer (lr=1e-4, weight decay=1e-4) with <strong>ReduceLROnPlateau</strong> scheduler (patience=7, factor=0.5). 
+        All images are resized to <strong>320×320 pixels</strong>, the optimal trade-off between resolving fine landmarks and training efficiency.
+        The final ensemble consists of 3 models trained with different random seeds (42, 123, 456), with predictions averaged at inference time.
       </p>
 
       <div class="figure">
         <img src="./static/images/augmentation.png" alt="Data Augmentation">
         <div class="caption">
-          Figure 3: <strong>Data Augmentation Pipeline.</strong> To handle limited data, we apply a diverse set of augmentations including random perspective changes (simulating phone tilt), 
-          color jittering, and random erasing.
+          Figure 4: <strong>Data Augmentation Pipeline.</strong> Each column shows a different augmentation: rotation (±5°), perspective warping, 
+          color jittering, night simulation, and random erasing. Note: Horizontal flip is intentionally disabled as it would invalidate the x-coordinate label.
         </div>
       </div>
     </section>
@@ -111,22 +172,43 @@
     <section class="innovations">
       <h2 class="title">Key Innovations</h2>
       
-      <h3>1. Night Simulation</h3>
+      <div class="section-hero-image">
+        <img src="./static/images/camera_to_coordinates.jpg" alt="Camera to GPS Coordinates Concept">
+      </div>
+      
+      <h3>1. Night Simulation Augmentation</h3>
       <p>
-        Night images initially accounted for 48% of our worst failures. We developed a tuned "Night Simulation" augmentation that randomly adjusts brightness (40-70%) 
-        and contrast to simulate low-light conditions without destroying structural information. This reduced catastrophic night failures (>50m error) by over 90%.
+        Night images initially accounted for <strong>48% of our worst 25 predictions</strong>. Our first attempt at night simulation (brightness 0.1-0.4) 
+        produced images that were too dark (effectively black), confusing the model. After visual debugging, we tuned the range to <strong>40-70% brightness</strong> 
+        with adjusted contrast, preserving structural visibility while simulating low-light conditions. This reduced catastrophic night failures (>50m error) 
+        by over 90%, dropping night images from nearly half of worst predictions to <strong>less than 10%</strong>.
       </p>
 
-      <h3>2. Active Learning Loop</h3>
+      <h3>2. Diagnostic Test Set & Active Learning</h3>
       <p>
-        We employed an iterative "human-in-the-loop" strategy. After training an initial model, we identified test samples with high error (>30m), labeled them as "Problematic Photos," 
-        and moved them to the training set. This effectively targeted the model's "blind spots" (e.g., specific unrepresented viewing angles).
+        Rather than treating the test set purely as a final evaluation metric, we designed a <strong>diagnostic-driven data collection process</strong>. 
+        We intentionally collected a massive external test set (1,322 images) to probe the model's geographic blind spots. After training, we identified 
+        high-error samples and developed a custom visualization tool that renders each failure alongside a satellite map showing both ground truth and predicted locations.
+      </p>
+      <p>
+        For each failure, we determined the root cause: <em>GPS label error?</em> → Correct the label. <em>Genuinely ambiguous view?</em> → Keep in test set. 
+        <em>New location not in training?</em> → Move to training set. Through two rounds of this process, we expanded training from 1,950 to 2,248 images, 
+        and <strong>catastrophic failures (>50m) dropped from 40 to just 1</strong>, a 97.5% reduction.
       </p>
 
       <h3>3. Manual GPS Correction</h3>
       <p>
-        We visually audited the 40 worst predictions and found that in 60% of cases, the model was actually <em>correct</em> and the ground truth GPS was drifted. 
-        We manually corrected these labels using satellite imagery, revealing the true performance of our model.
+        We systematically audited predictions and discovered that approximately <strong>60% of "high error" predictions</strong> were actually <em>correct</em> 
+        visual localizations where the ground truth GPS was drifted. We manually corrected 188 training labels and numerous test labels using Google Maps 
+        satellite imagery, revealing the true performance of our model. This highlights a fundamental challenge: smartphone GPS accuracy (3-10m) sets a noise floor 
+        that limits how precisely we can evaluate our model.
+      </p>
+
+      <h3>4. Ensemble Strategy</h3>
+      <p>
+        After optimizing our single ConvNeXt-Tiny model, we trained 3 identical models with different random seeds and averaged their predictions. 
+        Despite identical architecture and data, each model learns slightly different feature representations due to random initialization. 
+        By averaging, individual model errors tend to cancel out, improving mean error from <strong>7.46m to 7.16m</strong> (4% improvement).
       </p>
     </section>
 
@@ -135,7 +217,9 @@
       <h2 class="title">Results</h2>
 
       <p>
-        Our final ensemble of 3 ConvNeXt-Tiny models achieves state-of-the-art performance for this task.
+        We conducted over <strong>20 distinct training experiments</strong> to identify the optimal configuration, evaluating different backbones, 
+        loss functions, input resolutions, and augmentation strategies. Our final ConvNeXt-Tiny ensemble achieves a <strong>75% improvement</strong> 
+        over the ResNet-18 baseline.
       </p>
 
       <div class="is-centered">
@@ -145,7 +229,7 @@
               <th>Model</th>
               <th>Mean Error</th>
               <th>Median Error</th>
-              <th>Night Accuracy (<20m)</th>
+              <th>Night Accuracy (&lt;20m)</th>
             </tr>
           </thead>
           <tbody>
@@ -162,28 +246,39 @@
               <td>59.3%</td>
             </tr>
             <tr>
-              <td><strong>ConvNeXt Ensemble (Final)</strong></td>
+              <td><strong>ConvNeXt Ensemble (Ours)</strong></td>
               <td><strong>7.16m</strong></td>
               <td><strong>6.48m</strong></td>
-              <td><strong>>96%</strong></td>
+              <td><strong>&gt;96%</strong></td>
             </tr>
           </tbody>
         </table>
       </div>
 
+      <h3>Error Distribution</h3>
+      <p>
+        The majority of predictions fall within 10 meters, with a clear right-skewed distribution characteristic of well-calibrated regression models:
+      </p>
+      <ul>
+        <li><strong>36%</strong> of predictions within 5 meters</li>
+        <li><strong>77%</strong> of predictions within 10 meters</li>
+        <li><strong>99%</strong> of predictions within 20 meters</li>
+        <li>Only <strong>9 samples (0.9%)</strong> exceed 20 meters error</li>
+      </ul>
+
       <div class="figure">
         <img src="./static/images/comparison.png" alt="Model Comparison Chart">
         <div class="caption">
-          Figure 4: <strong>Performance Evolution.</strong> The progression of our mean error from the initial baseline to the final ensemble. 
-          Major drops correspond to the introduction of EfficientNet, Active Learning, and the ConvNeXt architecture.
+          Figure 5: <strong>Performance Evolution.</strong> The progression from ~29m baseline error to 7.16m final error. 
+          Major improvements came from switching to EfficientNet, adding Active Learning, and finally adopting ConvNeXt architecture.
         </div>
       </div>
 
       <div class="figure">
         <img src="./static/images/day_night.png" alt="Day vs Night Analysis">
         <div class="caption">
-          Figure 5: <strong>Day vs. Night Performance.</strong> Our model generalizes remarkably well to night scenes despite being trained on a predominantly daytime dataset, 
-          thanks to our specialized augmentation strategy.
+          Figure 6: <strong>Day vs. Night Performance.</strong> The model achieves comparable accuracy on night images (Mean: 7.05m, Median: 5.25m) 
+          despite the training set being predominantly daytime photos, validating our Night Simulation augmentation strategy.
         </div>
       </div>
 
@@ -193,33 +288,76 @@
     <section class="qualitative">
       <h2 class="title">Qualitative Analysis</h2>
 
+      <h3>What Does the Model See?</h3>
       <div class="figure">
         <img src="./static/images/gradcam.png" alt="GradCAM Visualization">
         <div class="caption">
-          Figure 6: <strong>What does the model see?</strong> GradCAM visualization reveals that the model focuses on distinctive skylines, building edges, and unique architectural features 
-          (like the specific window patterns of the library) rather than transient objects like people or cars.
+          Figure 7: <strong>GradCAM visualization</strong> reveals that the model focuses on distinctive skylines, building edges, and unique architectural features 
+          (like specific window patterns) rather than transient objects like people or cars.
         </div>
       </div>
 
-      <div class="figure">
-        <img src="./static/images/map_arrows.png" alt="Error Map Visualization">
-        <div class="caption">
-          Figure 7: <strong>Error Vectors.</strong> A map visualization of prediction errors. The arrows point from the true location to the predicted location. 
-          The shortness of the arrows demonstrates high precision across the entire campus area.
-        </div>
-      </div>
+      <h3>Failure Mode Analysis</h3>
+      <p>
+        We systematically analyzed the worst predictions to understand failure patterns:
+      </p>
+      <ul>
+        <li><strong>Covered Walkways:</strong> The most challenging areas are under Building 26 and Building 32, featuring long symmetric corridors 
+        with repetitive concrete pillars. These areas suffer from both structural ambiguity and poor GPS signal due to overhead cover.</li>
+        <li><strong>Similar Architecture:</strong> Buildings 28 and 32 share similar concrete architectural styles, causing occasional confusion.</li>
+        <li><strong>GPS Noise Floor:</strong> In ~15% of worst cases, the model's prediction was actually <em>more accurate</em> than the ground truth GPS label, 
+        suggesting we're approaching the inherent noise limit of smartphone GPS (3-10m).</li>
+      </ul>
     </section>
 
-    <!-- BibTeX -->
-    <section class="citation">
-      <h2 class="title">Citation</h2>
-      <pre class="bibtex">
-@article{campusgps2026,
-  title={Campus Image-to-GPS Regression: A Deep Learning Approach for Absolute Localization},
-  author={Student Name 1 and Student Name 2},
-  journal={Introduction to Deep Learning - Final Project},
-  year={2026}
-}</pre>
+    <!-- Feature Representation Analysis -->
+    <section class="feature-analysis">
+      <h2 class="title">Feature Representation Analysis</h2>
+
+      <p>
+        To understand what the model learned, we extracted the 768-dimensional feature vectors from ConvNeXt's final layer and visualized them using t-SNE.
+      </p>
+
+      <div class="figure">
+        <img src="./static/images/embeddings_tsne.png" alt="t-SNE Feature Visualization">
+        <div class="caption">
+          Figure 8: <strong>t-SNE visualization</strong> of ConvNeXt-Tiny features (768D → 2D) for test images, colored by geographic position.
+          The clear east-west gradient (left plot) indicates the network discovered features correlating with longitude, while the more mixed 
+          north-south pattern (right plot) reflects the campus's elongated layout.
+        </div>
+      </div>
+
+      <p>
+        This visualization confirms that the model learns <strong>location-aware representations</strong> purely from visual cues. It captures meaningful 
+        geographic structure rather than simply memorizing individual images. The smooth color gradients suggest the feature space is well-organized 
+        for the regression task.
+      </p>
+    </section>
+
+    <!-- Observations & Limitations -->
+    <section class="limitations">
+      <h2 class="title">Observations & Limitations</h2>
+
+      <h3>GPS Noise Floor</h3>
+      <p>
+        Our final mean error of 7.16m is likely approaching the <strong>"noise floor"</strong> of the dataset. Smartphone GPS accuracy is typically 3-10 meters. 
+        Through manual auditing, we found that further improvements would require higher-precision ground truth (e.g., RTK GPS) rather than better models.
+      </p>
+
+      <h3>Visual Ambiguity</h3>
+      <p>
+        The remaining errors cluster in areas with repetitive structures, such as the identical covered walkways under Buildings 26 and 32. Without unique landmarks, 
+        these areas are visually indistinguishable from certain viewpoints, representing a <strong>fundamental limit of single-image localization</strong>.
+      </p>
+
+      <h3>What Did Not Work</h3>
+      <ul>
+        <li><strong>Larger models (EfficientNet-V2-S at 384×384):</strong> Severe overfitting with 2× train/val gap</li>
+        <li><strong>Swin Transformer:</strong> Weaker inductive biases led to worse generalization on our small dataset</li>
+        <li><strong>Weighted loss schemes:</strong> Inverse variance weighting effectively ignored 80% of data; z-score weighting confused the model</li>
+        <li><strong>Horizontal flip augmentation:</strong> Invalidated x-coordinate labels (+2.1m error)</li>
+        <li><strong>Test-Time Augmentation:</strong> Added inference time without improving accuracy</li>
+      </ul>
     </section>
 
     <footer>
