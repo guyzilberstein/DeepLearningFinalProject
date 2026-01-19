@@ -40,7 +40,7 @@
 \maketitle
 
 \begin{abstract}
-This report presents a deep learning approach for predicting absolute GPS coordinates (latitude and longitude) from images of a university campus. The task is formulated as a regression problem, mapping visual features directly to geographic coordinates. We address key challenges including mobile phones gps accuracy errors, lighting variations (different times of day), and visual ambiguity in repetitive architectural structures. Our proposed method utilizes a ConvNeXt-Tiny ensemble with a custom MLP regression head, trained using a robust Huber Loss and a robust data augmentation strategy. We further employ an Active Learning loop to identify and incorporate "blind spot" locations into the training set. Our final ensemble model achieves a Mean Distance Error (MDE) of 7.16 meters and a Median Error of 6.48 meters on a held-out test set of 1,023 images, significantly outperforming ResNet and EfficientNet baselines.
+This report presents a deep learning approach for predicting absolute GPS coordinates (latitude and longitude) from images of a university campus. The task is formulated as a regression problem, mapping visual features directly to geographic coordinates. We address key challenges including mobile phones gps accuracy errors, lighting variations (different times of day), and visual ambiguity in repetitive architectural structures. Our proposed method utilizes a ConvNeXt-Tiny ensemble with a custom MLP regression head, trained using Huber Loss for robustness to label noise and a comprehensive data augmentation strategy. We further employ an Active Learning loop to identify and incorporate "blind spot" locations into the training set. Our final ensemble model achieves a Mean Distance Error (MDE) of 7.16 meters and a Median Error of 6.48 meters on a held-out test set of 1,023 images, significantly outperforming ResNet and EfficientNet baselines.
 \end{abstract}
 
 \section{Introduction}
@@ -157,6 +157,7 @@ The \textbf{patience} parameter controls how many epochs to wait before reducing
     \item \textbf{Geometric}: Random Rotation ($\pm 5^\circ$), Random Perspective (scale 0.2). Note: \textit{Horizontal Flip} is disabled as it would invalidate the physical x-coordinate.
     \item \textbf{Photometric}: Color Jitter (Brightness, Contrast, Saturation) to simulate varying lighting conditions at different times of day.
     \item \textbf{Night Simulation}: To address poor performance on night images, we implement a specific augmentation that reduces brightness (factor 0.4-0.7) and contrast with probability $p=0.2$. \textit{Refinement:} Early experiments with brightness 0.1-0.4 produced images that were too dark (effectively black), confusing the model. We tuned the range to 0.4-0.7 to preserve structural visibility while simulating low-light conditions.
+    \item \textbf{Random Erasing}: Randomly erases rectangular patches in the image ($p=0.2$), forcing the model to rely on multiple visual cues rather than a single landmark. This simulates real-world occlusions (such as people) partially blocking the view.
 \end{itemize}
 
 \begin{figure}[H]
@@ -194,7 +195,7 @@ A key methodological decision was how we used the test set. Rather than treating
     \item \textbf{Round 2}: Identified 131 images ($>20m$ error) from remaining failures $\rightarrow$ Training set grew to 2,248.
 \end{enumerate}
 
-\textbf{Methodological Justification.} This approach follows the principles of \textit{data-centric machine learning}, where model performance is improved by systematically enhancing dataset quality and coverage rather than solely tuning model architecture. The transferred samples were not arbitrary "hard examples", they represented specific geographic locations absent from the original training distribution. The audit process ensured that only samples identified as \textit{coverage gaps} (not mislabeled data or inherently ambiguous views) were moved. Importantly, the final test set (1,023 samples) remains substantial, externally collected, and representative of the full target area, preserving the integrity of our evaluation.
+\textbf{Methodological Justification.} This approach follows the principles of \textit{data-centric deep learning}, where model performance is improved by systematically enhancing dataset quality and coverage rather than solely tuning model architecture. The transferred samples were not arbitrary "hard examples", they represented specific geographic locations absent from the original training distribution. The audit process ensured that only samples identified as \textit{coverage gaps} (not mislabeled data or inherently ambiguous views) were moved. Importantly, the final test set (1,023 samples) remains substantial, externally collected, and representative of the full target area, preserving the integrity of our evaluation.
 
 \subsection{Ensemble}
 After optimizing our single ConvNeXt-Tiny model, we reached a point where further hyperparameter tuning yielded diminishing returns. To extract additional performance, we trained 3 identical models with different random seeds (42, 123, 456) and averaged their predictions at inference time.
@@ -347,7 +348,7 @@ We systematically analyzed the "Top 25 Worst Predictions" to diagnose failure mo
 \end{itemize}
 
 \subsection{Per-Area Error Analysis}
-We analyzed error patterns across different geographic regions of the campus to identify location-specific challenges. Table \ref{tab:per_area} shows error statistics broken down by area.
+To better understand model performance across different environments, we divided the predefined campus region into 5 distinct areas based on their architectural and visual characteristics. Table \ref{tab:per_area} shows error statistics broken down by area.
 
 \begin{table}[H]
     \centering
@@ -371,7 +372,7 @@ We analyzed error patterns across different geographic regions of the campus to 
 \textbf{Key Findings:}
 \begin{itemize}
     \item \textbf{Building 35 Area (Best: 5.68m)}: This area has the most distinctive architectural features. Building facades, outdoor furniture, and surrounding vegetation create easily identifiable landmarks that the model reliably recognizes.
-    \item \textbf{Library Area (6.24m)}: The library plaza contains distinctive elements - unique building shapes, open spaces, and recognizable outdoor features. This area was also well-represented in training (306 samples), contributing to strong performance.
+    \item \textbf{Library Area (6.24m)}: The library plaza contains distinctive elements - unique building shapes, open spaces, and recognizable outdoor features. This area had the most training samples (306) as it covers a relatively larger geographic region than other defined areas.
     \item \textbf{Building 28 Area (6.86m)}: Performance is slightly lower due to visual similarities with Building 32 Area. Both share similar concrete architectural styles and corridor structures, causing occasional confusion.
     \item \textbf{Building 32 Area (7.91m)}: Includes covered corridors and walkways under roofs, creating challenging conditions: lower lighting, repetitive concrete pillars, and visually similar perspectives. The architectural overlap with Building 28 contributes to localization ambiguity.
     \item \textbf{Under Building 26 (Worst: 9.25m)}: The most challenging area. The entire zone is under a roof/overhang, resulting in reduced natural lighting and highly repetitive structural elements (concrete pillars, similar flooring patterns). These generic features lack distinctive landmarks, making it difficult to distinguish between positions within the covered area.
